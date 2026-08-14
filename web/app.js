@@ -34,6 +34,7 @@ const labConfidenceEl = document.querySelector("#lab-confidence");
 const labArtifactEl = document.querySelector("#lab-artifact");
 const labBandsEl = document.querySelector("#lab-bands");
 const experimentWindowCountEl = document.querySelector("#experiment-window-count");
+const experimentSummaryEl = document.querySelector("#experiment-summary");
 const experimentRowsEl = document.querySelector("#experiment-rows");
 
 const bandColors = {
@@ -146,7 +147,7 @@ for (const [label, key] of experimentRows) {
   const row = document.createElement("div");
   row.className = "experiment-row";
   row.dataset.key = key;
-  row.innerHTML = `<span>${label}</span><strong>-- → --</strong><output>--</output>`;
+  row.innerHTML = `<span>${label}</span><strong>-- → --</strong><output>--</output><small>IQR -- / --</small>`;
   experimentRowsEl.appendChild(row);
 }
 
@@ -380,13 +381,16 @@ function updateSyncAudit() {
 function updateExperimentPanel(frame) {
   const experiment = frame.experiment;
   if (!experiment) return;
-  experimentWindowCountEl.textContent = `${experiment.clean_windows}/${experiment.total_windows} clean`;
+  experimentWindowCountEl.textContent = `${experiment.clean_windows}/${experiment.total_windows} usable · ${experiment.artifact_windows || 0} artifact-flagged`;
+  experimentSummaryEl.textContent = experiment.primary_result?.summary || "Waiting for enough clean windows.";
+  experimentSummaryEl.classList.toggle("is-supported", Boolean(experiment.primary_result?.supported));
   [...experimentRowsEl.querySelectorAll(".experiment-row")].forEach((row) => {
     const comparison = experiment.comparisons?.[row.dataset.key];
     if (!comparison) return;
-    row.querySelector("strong").textContent = `${formatOptionalUv2(comparison.eyes_open_uv2)} → ${formatOptionalUv2(comparison.eyes_closed_uv2)}`;
-    row.querySelector("output").textContent = formatPercentChange(comparison.percent_change);
-    row.classList.toggle("is-increase", numberOrZero(comparison.percent_change) > 0);
+    row.querySelector("strong").textContent = `${formatOptionalUv2(comparison.eyes_open_median_uv2)} → ${formatOptionalUv2(comparison.eyes_closed_median_uv2)}`;
+    row.querySelector("output").textContent = formatRatioAndDb(comparison.ratio_closed_open, comparison.db_change);
+    row.querySelector("small").textContent = `IQR ${formatIqr(comparison.eyes_open_iqr_uv2)} / ${formatIqr(comparison.eyes_closed_iqr_uv2)}`;
+    row.classList.toggle("is-increase", numberOrZero(comparison.ratio_closed_open) > 1);
   });
 }
 
@@ -404,6 +408,17 @@ function formatPercentChange(value) {
   if (!Number.isFinite(value)) return "--";
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(0)}%`;
+}
+
+function formatRatioAndDb(ratio, dbChange) {
+  if (!Number.isFinite(ratio) || !Number.isFinite(dbChange)) return "--";
+  const sign = dbChange > 0 ? "+" : "";
+  return `${ratio.toFixed(2)}x · ${sign}${dbChange.toFixed(1)} dB`;
+}
+
+function formatIqr(values) {
+  if (!Array.isArray(values) || values.length !== 2) return "--";
+  return `${formatUv2Number(values[0])}-${formatUv2Number(values[1])}`;
 }
 
 function signedLabel(value, positive, negative) {
