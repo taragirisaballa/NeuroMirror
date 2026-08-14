@@ -28,11 +28,11 @@ const bandColors = {
 const bandNames = Object.keys(bandColors);
 
 const brainRegions = {
-  frontal: { x: 0.36, y: 0.43, rx: 0.23, ry: 0.18, color: "rgba(77, 246, 255, 0.14)" },
-  central: { x: 0.54, y: 0.42, rx: 0.2, ry: 0.2, color: "rgba(141, 255, 122, 0.13)" },
-  temporal: { x: 0.52, y: 0.59, rx: 0.26, ry: 0.13, color: "rgba(255, 78, 163, 0.12)" },
-  posterior: { x: 0.73, y: 0.45, rx: 0.2, ry: 0.19, color: "rgba(255, 228, 92, 0.13)" },
-  occipital: { x: 0.79, y: 0.52, rx: 0.14, ry: 0.17, color: "rgba(255, 90, 83, 0.13)" },
+  frontal: { x: 0.34, y: 0.4, rx: 0.21, ry: 0.14, color: "rgba(77, 246, 255, 0.08)" },
+  central: { x: 0.54, y: 0.34, rx: 0.18, ry: 0.14, color: "rgba(141, 255, 122, 0.07)" },
+  temporal: { x: 0.52, y: 0.58, rx: 0.23, ry: 0.1, color: "rgba(255, 78, 163, 0.06)" },
+  posterior: { x: 0.72, y: 0.42, rx: 0.18, ry: 0.14, color: "rgba(255, 228, 92, 0.07)" },
+  occipital: { x: 0.8, y: 0.48, rx: 0.13, ry: 0.13, color: "rgba(255, 90, 83, 0.07)" },
 };
 
 const channelRegions = {
@@ -45,13 +45,13 @@ const channelRegions = {
 };
 
 const projectionAnchors = [
-  { label: "Fp1/Fp2", channels: ["Fp1", "Fp2"], region: "frontal" },
-  { label: "C3/C4", channels: ["C3", "C4"], region: "central" },
-  { label: "O1/O2", channels: ["O1", "O2"], region: "occipital" },
+  { label: "Fp1/Fp2", channels: ["Fp1", "Fp2"], region: "frontal", baseline: -7 },
+  { label: "C3/C4", channels: ["C3", "C4"], region: "central", baseline: -4 },
+  { label: "O1/O2", channels: ["O1", "O2"], region: "occipital", baseline: 2 },
 ];
 
 const bandTracePhase = { delta: 0.2, theta: 1.1, alpha: 2.0, beta: 2.9, gamma: 3.8 };
-const bandLaneOffset = { delta: -28, theta: -14, alpha: 0, beta: 14, gamma: 28 };
+const bandLaneOffset = { delta: -34, theta: -17, alpha: 0, beta: 17, gamma: 34 };
 
 const state = {
   frame: null,
@@ -229,8 +229,8 @@ function drawField() {
   fieldCtx.fill();
 
   drawSpectralProfileTraces(fieldCtx, brain);
-  drawRegionLabels(fieldCtx, brain);
   drawProjectionAnchors(fieldCtx, brain);
+  drawRegionLabels(fieldCtx, brain);
   fieldCtx.shadowBlur = 0;
 }
 
@@ -253,12 +253,12 @@ function drawBrainMesh(ctx, brain, alpha, theta) {
   for (const region of lobes) {
     const x = brain.cx + (region.x - 0.5) * brain.rx * 2;
     const y = brain.cy + (region.y - 0.5) * brain.ry * 2;
-    const glow = ctx.createRadialGradient(x, y, 8, x, y, brain.rx * region.rx * 2.2);
+    const glow = ctx.createRadialGradient(x, y, 8, x, y, brain.rx * region.rx * 1.9);
     glow.addColorStop(0, region.color);
     glow.addColorStop(1, "rgba(3,4,6,0)");
     ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.ellipse(x, y, brain.rx * region.rx * 2.1, brain.ry * region.ry * 2.1, -0.1, 0, Math.PI * 2);
+    ctx.ellipse(x, y, brain.rx * region.rx * 1.75, brain.ry * region.ry * 1.75, -0.1, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -270,13 +270,13 @@ function drawBrainMesh(ctx, brain, alpha, theta) {
 
   drawBrainstem(ctx, brain);
 
-  ctx.strokeStyle = "rgba(244,247,244,0.15)";
+  ctx.strokeStyle = "rgba(244,247,244,0.07)";
   ctx.lineWidth = 0.9;
   for (const region of Object.values(brainRegions)) {
     const x = brain.cx + (region.x - 0.5) * brain.rx * 2;
     const y = brain.cy + (region.y - 0.5) * brain.ry * 2;
     ctx.beginPath();
-    ctx.ellipse(x, y, brain.rx * region.rx * 1.2, brain.ry * region.ry * 1.2, -0.1, 0, Math.PI * 2);
+    ctx.ellipse(x, y, brain.rx * region.rx * 1.02, brain.ry * region.ry * 1.02, -0.1, 0, Math.PI * 2);
     ctx.stroke();
   }
 
@@ -345,37 +345,39 @@ function drawBandProfile(ctx, brain, band, bandIndex) {
     value: normalizedAnchorBandPower(anchor, band),
   }));
   const strongest = Math.max(...profile.map((entry) => entry.value));
-  if (strongest < 0.08) return;
+  const globalBand = state.normalized[band] || 0;
+  if (strongest < 0.06) return;
 
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.shadowColor = bandColors[band];
+  ctx.globalAlpha = 0.48 + globalBand * 0.52;
 
-  drawReferenceProfile(ctx, band, bandIndex, profile);
+  drawReferenceProfile(ctx, band, profile, globalBand);
   for (let index = 0; index < profile.length - 1; index += 1) {
-    drawMeasuredSegment(ctx, band, bandIndex, profile[index], profile[index + 1]);
+    drawMeasuredSegment(ctx, band, profile[index], profile[index + 1], globalBand);
   }
   for (const entry of profile) {
-    drawBandAnchorGlow(ctx, band, entry);
+    drawBandAnchorBehavior(ctx, band, entry, globalBand);
   }
   ctx.restore();
 }
 
-function drawReferenceProfile(ctx, band, bandIndex, profile) {
+function drawReferenceProfile(ctx, band, profile, globalBand) {
   ctx.save();
-  ctx.strokeStyle = colorWithAlpha(bandColors[band], 0.16);
-  ctx.lineWidth = 0.9;
+  ctx.strokeStyle = colorWithAlpha(bandColors[band], 0.12 + globalBand * 0.12);
+  ctx.lineWidth = 0.8 + globalBand * 0.7;
   ctx.shadowBlur = 0;
   ctx.beginPath();
   profile.forEach((entry, index) => {
-    const point = spectralPointBetween(entry.point, entry.point, 0, band, bandIndex, entry.value, entry.value);
+    const point = spectralPointBetween(entry.point, entry.point, 0, band, entry.value, entry.value);
     if (index === 0) ctx.moveTo(point.x, point.y);
     else {
       const previous = profile[index - 1];
       for (let step = 1; step <= 18; step += 1) {
         const t = step / 18;
-        const next = spectralPointBetween(previous.point, entry.point, t, band, bandIndex, previous.value, entry.value);
+        const next = spectralPointBetween(previous.point, entry.point, t, band, previous.value, entry.value);
         ctx.lineTo(next.x, next.y);
       }
     }
@@ -384,17 +386,18 @@ function drawReferenceProfile(ctx, band, bandIndex, profile) {
   ctx.restore();
 }
 
-function drawMeasuredSegment(ctx, band, bandIndex, start, end) {
-  const steps = 22;
-  let previous = spectralPointBetween(start.point, end.point, 0, band, bandIndex, start.value, end.value);
+function drawMeasuredSegment(ctx, band, start, end, globalBand) {
+  const steps = 30;
+  let previous = spectralPointBetween(start.point, end.point, 0, band, start.value, end.value);
   for (let step = 1; step <= steps; step += 1) {
     const t = step / steps;
-    const current = spectralPointBetween(start.point, end.point, t, band, bandIndex, start.value, end.value);
+    const current = spectralPointBetween(start.point, end.point, t, band, start.value, end.value);
     const value = start.value + (end.value - start.value) * t;
+    const localShape = anchorInfluence(t, start.value, end.value);
     const inferred = Math.sin(Math.PI * t);
-    ctx.strokeStyle = colorWithAlpha(bandColors[band], 0.18 + value * 0.62 - inferred * 0.08);
-    ctx.lineWidth = 1.0 + value * 7.2;
-    ctx.shadowBlur = 7 + value * 20;
+    ctx.strokeStyle = colorWithAlpha(bandColors[band], 0.12 + globalBand * 0.22 + localShape * 0.6 - inferred * 0.05);
+    ctx.lineWidth = 0.8 + globalBand * 1.1 + localShape * 9.8;
+    ctx.shadowBlur = 4 + globalBand * 10 + localShape * 28;
     ctx.beginPath();
     ctx.moveTo(previous.x, previous.y);
     ctx.lineTo(current.x, current.y);
@@ -403,28 +406,71 @@ function drawMeasuredSegment(ctx, band, bandIndex, start, end) {
   }
 }
 
-function spectralPointBetween(start, end, t, band, bandIndex, startValue, endValue) {
+function spectralPointBetween(start, end, t, band, startValue, endValue) {
   const x = start.x + (end.x - start.x) * t;
   const y = start.y + (end.y - start.y) * t;
   const localValue = startValue + (endValue - startValue) * t;
   const betweenOnly = Math.sin(Math.PI * t);
   const baseLift = (bandLaneOffset[band] || 0) * betweenOnly;
-  const oscillation = Math.sin(state.phase * bandMotionRate(band) + t * Math.PI * 3 + bandTracePhase[band]) * betweenOnly;
+  const localShape = anchorInfluence(t, startValue, endValue);
+  const oscillation = Math.sin(state.phase * bandMotionRate(band) + t * Math.PI * 5 + bandTracePhase[band]) * betweenOnly;
+  const anchorBreath = Math.sin(state.phase * 1.6 + bandTracePhase[band]) * (startValue - endValue) * betweenOnly;
   return {
     x,
-    y: y + baseLift + oscillation * (4 + localValue * 10),
+    y: y + baseLift + anchorBreath * 10 + oscillation * (2 + localValue * 6 + localShape * 12),
   };
 }
 
-function drawBandAnchorGlow(ctx, band, entry) {
-  if (entry.value < 0.1) return;
+function anchorInfluence(t, startValue, endValue) {
+  const startPulse = Math.exp(-Math.pow(t / 0.24, 2)) * startValue;
+  const endPulse = Math.exp(-Math.pow((1 - t) / 0.24, 2)) * endValue;
+  return Math.max(startPulse, endPulse);
+}
+
+function drawBandAnchorBehavior(ctx, band, entry, globalBand) {
+  if (entry.value < 0.08) return;
   const { x, y } = entry.point;
-  ctx.fillStyle = colorWithAlpha(bandColors[band], 0.16 + entry.value * 0.46);
-  ctx.shadowBlur = 8 + entry.value * 20;
+  const pulse = (Math.sin(state.phase * bandMotionRate(band) + bandTracePhase[band]) + 1) / 2;
+  const radius = 3 + entry.value * 13 + pulse * entry.value * 4;
+  const glow = ctx.createRadialGradient(x, y, 1, x, y, radius * 3.2);
+  glow.addColorStop(0, colorWithAlpha(bandColors[band], 0.2 + entry.value * 0.42));
+  glow.addColorStop(0.45, colorWithAlpha(bandColors[band], 0.06 + entry.value * 0.16));
+  glow.addColorStop(1, colorWithAlpha(bandColors[band], 0));
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(x, y, radius * 3.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  drawLocalWavelet(ctx, band, entry, globalBand);
+
+  ctx.fillStyle = colorWithAlpha(bandColors[band], 0.14 + globalBand * 0.2 + entry.value * 0.52);
+  ctx.shadowBlur = 8 + entry.value * 18;
   ctx.shadowColor = bandColors[band];
   ctx.beginPath();
-  ctx.arc(x, y, 1.4 + entry.value * 4.6, 0, Math.PI * 2);
+  ctx.arc(x, y, 1.2 + entry.value * 3.1, 0, Math.PI * 2);
   ctx.fill();
+}
+
+function drawLocalWavelet(ctx, band, entry, globalBand) {
+  const { x, y } = entry.point;
+  const span = 20 + entry.value * 42;
+  const amplitude = 2 + entry.value * 13;
+  ctx.save();
+  ctx.strokeStyle = colorWithAlpha(bandColors[band], 0.2 + globalBand * 0.24 + entry.value * 0.34);
+  ctx.lineWidth = 0.8 + globalBand * 1.2 + entry.value * 3.8;
+  ctx.shadowBlur = 7 + entry.value * 18;
+  ctx.shadowColor = bandColors[band];
+  ctx.beginPath();
+  for (let step = 0; step <= 28; step += 1) {
+    const t = step / 28;
+    const localX = x - span / 2 + span * t;
+    const envelope = Math.sin(Math.PI * t);
+    const localY = y + Math.sin(t * Math.PI * 4 + state.phase * bandMotionRate(band) + bandTracePhase[band]) * amplitude * envelope;
+    if (step === 0) ctx.moveTo(localX, localY);
+    else ctx.lineTo(localX, localY);
+  }
+  ctx.stroke();
+  ctx.restore();
 }
 
 function normalizedAnchorBandPower(anchor, band) {
@@ -435,7 +481,7 @@ function normalizedAnchorBandPower(anchor, band) {
   const anchorLog = Math.log10(rawAnchorBandPower(anchor, band) + 1e-18);
   const spatial = max === min ? 0.62 : (anchorLog - min) / (max - min);
   const globalBand = state.normalized[band] || 0;
-  return Math.min(1, 0.11 + globalBand * (0.26 + spatial * 0.63));
+  return Math.min(1, 0.07 + globalBand * (0.2 + spatial * 0.76));
 }
 
 function rawAnchorBandPower(anchor, band) {
@@ -447,7 +493,7 @@ function anchorPoint(brain, anchor) {
   const region = brainRegions[anchor.region];
   return {
     x: brain.cx + (region.x - 0.5) * brain.rx * 2,
-    y: brain.cy + (region.y - 0.5) * brain.ry * 2,
+    y: brain.cy + (region.y - 0.5) * brain.ry * 2 + anchor.baseline,
   };
 }
 
@@ -465,7 +511,7 @@ function colorWithAlpha(hex, alpha) {
 
 function drawRegionLabels(ctx, brain) {
   ctx.save();
-  ctx.fillStyle = "rgba(244,247,244,0.58)";
+  ctx.fillStyle = "rgba(244,247,244,0.42)";
   ctx.font = "700 11px ui-sans-serif, system-ui";
   ctx.textAlign = "center";
   const labels = [
@@ -483,23 +529,30 @@ function drawRegionLabels(ctx, brain) {
 
 function drawProjectionAnchors(ctx, brain) {
   ctx.save();
-  ctx.font = "700 10px ui-sans-serif, system-ui";
+  ctx.font = "700 9px ui-sans-serif, system-ui";
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
   for (const anchor of projectionAnchors) {
     const { x, y } = anchorPoint(brain, anchor);
     const strength = anchor.channels.reduce((sum, channel) => sum + channelIntensity(channel), 0) / anchor.channels.length;
-    ctx.shadowBlur = 10 + strength * 18;
-    ctx.shadowColor = "rgba(244,247,244,0.9)";
-    ctx.fillStyle = "rgba(249,255,248,0.92)";
+    const dominant = dominantAnchorBand(anchor);
+    ctx.shadowBlur = 6 + strength * 14;
+    ctx.shadowColor = bandColors[dominant];
+    ctx.fillStyle = colorWithAlpha(bandColors[dominant], 0.38 + strength * 0.32);
     ctx.beginPath();
-    ctx.arc(x, y, 3.2 + strength * 3.6, 0, Math.PI * 2);
+    ctx.arc(x, y, 2.2 + strength * 2.4, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = "rgba(244,247,244,0.66)";
-    ctx.fillText(anchor.label, x, y - 10);
+    ctx.fillStyle = "rgba(244,247,244,0.38)";
+    ctx.fillText(anchor.label, x, y - 8);
   }
   ctx.restore();
+}
+
+function dominantAnchorBand(anchor) {
+  return bandNames.reduce((best, band) => (
+    rawAnchorBandPower(anchor, band) > rawAnchorBandPower(anchor, best) ? band : best
+  ), "delta");
 }
 
 function drawTraces() {
