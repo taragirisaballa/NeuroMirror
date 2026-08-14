@@ -292,24 +292,6 @@ function drawBrainMesh(ctx, brain, alpha, theta) {
   traceBrainPath(ctx, brain);
   ctx.stroke();
 
-  ctx.beginPath();
-  ctx.save();
-  traceBrainPath(ctx, brain);
-  ctx.clip();
-  for (let i = 0; i < 92; i += 1) {
-    const start = seededBrainPoint(brain, i, 0.78);
-    const end = seededBrainPoint(brain, i * 7 + 11, 0.84);
-    const color = Object.values(bandColors)[i % 5];
-    ctx.strokeStyle = colorWithAlpha(color, 0.13 + theta * 0.06);
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    const control = seededBrainPoint(brain, i * 13 + 5, 0.42);
-    ctx.quadraticCurveTo(control.x, control.y, end.x, end.y);
-    ctx.stroke();
-  }
-  ctx.restore();
-
   drawBrainstem(ctx, brain);
 
   ctx.strokeStyle = "rgba(244,247,244,0.15)";
