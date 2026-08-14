@@ -26,6 +26,7 @@ const bandColors = {
   gamma: "#ff5a53",
 };
 const bandNames = Object.keys(bandColors);
+const fallbackNormalizedBands = { delta: 0, theta: 0, alpha: 0, beta: 0, gamma: 0 };
 
 const brainRegions = {
   frontal: { x: 0.34, y: 0.4, rx: 0.21, ry: 0.14, color: "rgba(77, 246, 255, 0.08)" },
@@ -66,13 +67,15 @@ const state = {
   paused: false,
 };
 
+// MNE standard_1020 montage coordinates projected into the sagittal inset:
+// montage y axis -> anterior/posterior, montage x axis -> left/right separation.
 const electrodeLayout = {
-  Fp1: { x: 0.24, y: 0.38, region: "frontal" },
-  Fp2: { x: 0.24, y: 0.55, region: "frontal" },
-  C3: { x: 0.52, y: 0.34, region: "central" },
-  C4: { x: 0.52, y: 0.58, region: "central" },
-  O1: { x: 0.79, y: 0.39, region: "posterior" },
-  O2: { x: 0.79, y: 0.55, region: "posterior" },
+  Fp1: electrodePoint(-0.0294367, 0.0839171, "frontal"),
+  Fp2: electrodePoint(0.0298723, 0.0848959, "frontal"),
+  C3: electrodePoint(-0.0653581, -0.0116317, "central"),
+  C4: electrodePoint(0.0671179, -0.0109003, "central"),
+  O1: electrodePoint(-0.0294134, -0.112449, "posterior"),
+  O2: electrodePoint(0.0298426, -0.112156, "posterior"),
 };
 
 for (const band of bandNames) {
@@ -137,7 +140,7 @@ function applyFrame(frame) {
   }
   state.frame = frame;
   state.bands = averageBands(frame.features);
-  state.normalized = normalizeBands(state.bands);
+  state.normalized = frame.normalized_bands || normalizeBands(state.bands);
   if (!state.displayInitialized) {
     state.displayNormalized = { ...state.normalized };
     state.displayInitialized = true;
@@ -179,12 +182,12 @@ function normalizeBands(bands) {
 function updateHud(frame) {
   stateEl.textContent = frame.state.replace("_", " ");
   timeEl.textContent = `${frame.time_s.toFixed(3)}s`;
-  artifactEl.textContent = frame.summary.blink_like_artifact ? "blink-like artifact" : "signal clean";
+  artifactEl.textContent = frame.summary.blink_like_artifact ? "blink-like artifact · µV²" : "signal clean · µV²";
   artifactEl.style.color = frame.summary.blink_like_artifact ? "var(--yellow)" : "var(--green)";
   alphaRatioEl.textContent = `${frame.summary.posterior_alpha_ratio.toFixed(2)}x`;
-  qualityEl.textContent = Object.values(frame.summary.channel_quality).includes("noisy") ? "review" : "ok";
+  qualityEl.textContent = `${Math.round(numberOrZero(frame.summary.measurement_confidence || 1) * 100)}%`;
   dominantEl.textContent = frame.summary.dominant_rhythm || "warming";
-  amplitudeEl.textContent = `${numberOrZero(frame.summary.signal_amplitude_uv).toFixed(1)} uV`;
+  amplitudeEl.textContent = `${numberOrZero(frame.summary.signal_amplitude_uv).toFixed(1)} µV`;
   artifactIntensityEl.textContent = `${Math.round(numberOrZero(frame.summary.artifact_intensity) * 100)}%`;
   spreadEl.textContent = `${Math.round(numberOrZero(frame.summary.spectral_spread) * 100)}%`;
   balanceEl.textContent = signedLabel(numberOrZero(frame.summary.hemispheric_balance), "left", "right");
@@ -202,7 +205,7 @@ function updateSmoothBands() {
     const band = row.firstElementChild.textContent;
     const value = state.displayNormalized[band] || 0;
     row.querySelector(".bar span").style.width = `${Math.round(value * 100)}%`;
-    row.querySelector("output").textContent = `${Math.round(value * 100)}%`;
+    row.querySelector("output").textContent = formatBandPowerUv2(state.bands[band]);
   });
 }
 
@@ -216,6 +219,13 @@ function numberOrZero(value) {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function formatBandPowerUv2(value) {
+  const uv2 = numberOrZero(value) * 1e12;
+  if (uv2 >= 100) return uv2.toFixed(0);
+  if (uv2 >= 10) return uv2.toFixed(1);
+  return uv2.toFixed(2);
 }
 
 function signedLabel(value, positive, negative) {
@@ -261,7 +271,7 @@ function appendTrajectoryFrame(frame) {
 }
 
 function bandStateMetrics(frame, band) {
-  const features = frame.features;
+  const features = frame.normalized_features || frame.features;
   const summary = frame.summary || {};
   const frontal = channelBandMean(features, ["Fp1", "Fp2"], band);
   const central = channelBandMean(features, ["C3", "C4"], band);
@@ -272,13 +282,14 @@ function bandStateMetrics(frame, band) {
   const regionalBalance = (left - right) / (left + right + 1e-18);
   const anteriorPosterior = (posterior - frontal) / total;
   const centralPull = (central - (frontal + posterior) / 2) / total;
-  const relativePower = state.normalized[band] || 0;
+  const relativePower = frame.normalized_bands?.[band] ?? state.normalized[band] ?? 0;
   const posteriorAlpha = Math.log2(Math.max(0.15, numberOrZero(summary.posterior_alpha_ratio)));
   const artifact = numberOrZero(summary.artifact_intensity);
   const spread = numberOrZero(summary.spectral_spread);
   const wholeFieldLateral = numberOrZero(summary.hemispheric_balance);
   const wholeFieldPosterior = clamp(posteriorAlpha / 2.2, -1, 1);
   const wholeFieldSpread = clamp(spread * 2 - 1, -1, 1);
+  const confidence = numberOrZero(summary.measurement_confidence || 1);
 
   return {
     lateral: clamp(wholeFieldLateral * 0.66 + regionalBalance * 0.28, -1, 1),
@@ -286,6 +297,7 @@ function bandStateMetrics(frame, band) {
     central: clamp(wholeFieldSpread * 0.48 + centralPull * 0.36, -1, 1),
     relativePower,
     artifact: clamp(artifact, 0, 1),
+    confidence: clamp(confidence, 0.05, 1),
     spread: clamp(spread, 0, 1),
   };
 }
@@ -310,14 +322,13 @@ function projectStatePoint(layout, metrics, band) {
   const yAxis = -metrics.posterior * layout.ry;
   const zAxis = metrics.central * layout.ry * 0.32;
   const orbit = bandOffset * layout.ry * (0.6 + metrics.relativePower * 0.6);
-  const artifactJitter = metrics.artifact * layout.ry * 0.07;
-  const jitter = Math.sin(state.phase * 7 + bandTracePhase[band]) * artifactJitter;
 
   return {
-    x: layout.cx + xAxis * Math.cos(angle) - yAxis * Math.sin(angle) + orbit + jitter,
-    y: layout.cy + xAxis * Math.sin(angle) + yAxis * Math.cos(angle) - zAxis + orbit * 0.32 - jitter * 0.45,
+    x: layout.cx + xAxis * Math.cos(angle) - yAxis * Math.sin(angle) + orbit,
+    y: layout.cy + xAxis * Math.sin(angle) + yAxis * Math.cos(angle) - zAxis + orbit * 0.32,
     power: metrics.relativePower,
     artifact: metrics.artifact,
+    confidence: metrics.confidence,
     spread: metrics.spread,
   };
 }
@@ -385,11 +396,11 @@ function drawBandTrail(ctx, band, trail) {
     const current = trail[index];
     const age = index / trail.length;
     const localPower = (previous.power + current.power) / 2;
-    const artifact = (previous.artifact + current.artifact) / 2;
-    const alpha = Math.max(0, Math.pow(age, 2.2) * (0.16 + localPower * 0.7));
+    const confidence = (previous.confidence + current.confidence) / 2;
+    const alpha = Math.max(0, Math.pow(age, 2.2) * (0.08 + localPower * 0.62) * confidence);
     ctx.strokeStyle = colorWithAlpha(color, alpha);
-    ctx.lineWidth = 0.7 + localPower * 4.3 + artifact * 2.1;
-    ctx.shadowBlur = 2 + localPower * 15;
+    ctx.lineWidth = 0.45 + localPower * 4.4 * confidence;
+    ctx.shadowBlur = 1 + localPower * 14 * confidence;
     ctx.beginPath();
     ctx.moveTo(previous.x, previous.y);
     ctx.lineTo(current.x, current.y);
@@ -399,16 +410,16 @@ function drawBandTrail(ctx, band, trail) {
   for (let index = Math.max(0, trail.length - 88); index < trail.length; index += 13) {
     const point = trail[index];
     const age = index / trail.length;
-    ctx.fillStyle = colorWithAlpha("#f4f7f4", 0.18 + age * 0.48);
-    ctx.shadowBlur = 4 + point.power * 12;
+    ctx.fillStyle = colorWithAlpha("#f4f7f4", (0.14 + age * 0.56) * (point.confidence || 1));
+    ctx.shadowBlur = 4 + point.power * 12 * (point.confidence || 1);
     ctx.shadowColor = color;
     ctx.beginPath();
     ctx.arc(point.x, point.y, 1.1 + point.power * 2.8, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  ctx.fillStyle = colorWithAlpha(color, 0.32 + dominance * 0.52);
-  ctx.shadowBlur = 10 + dominance * 22;
+  ctx.fillStyle = colorWithAlpha(color, (0.24 + dominance * 0.56) * (latest.confidence || 1));
+  ctx.shadowBlur = 8 + dominance * 22 * (latest.confidence || 1);
   ctx.beginPath();
   ctx.arc(latest.x, latest.y, 2 + dominance * 5, 0, Math.PI * 2);
   ctx.fill();
@@ -421,8 +432,8 @@ function drawCurrentStateMarker(ctx) {
   const point = state.latestPoints[dominant];
   if (!point) return;
   ctx.save();
-  ctx.fillStyle = "rgba(244,247,244,0.88)";
-  ctx.shadowBlur = 14;
+  ctx.fillStyle = colorWithAlpha("#f4f7f4", 0.28 + (point.confidence || 1) * 0.62);
+  ctx.shadowBlur = 6 + 12 * (point.confidence || 1);
   ctx.shadowColor = bandColors[dominant] || "#f4f7f4";
   ctx.beginPath();
   ctx.arc(point.x, point.y, 2.4 + (point.power || 0) * 2.5, 0, Math.PI * 2);
@@ -515,10 +526,10 @@ function drawBrainstem(ctx, brain) {
 }
 
 function channelIntensity(channel) {
-  const bands = state.frame?.features?.[channel];
+  const bands = state.frame?.normalized_features?.[channel] || state.frame?.features?.[channel];
   if (!bands) return 0.2;
   const total = Object.values(bands).reduce((sum, value) => sum + value, 0) || 1e-18;
-  return Math.min(1, total / (total + 4e-11));
+  return Math.min(1, total / Object.values(fallbackNormalizedBands).length);
 }
 
 function drawSpectralProfileTraces(ctx, brain) {
@@ -808,24 +819,24 @@ function drawHeadmap() {
 
   if (!state.frame?.features) return;
   for (const [channel, point] of Object.entries(electrodeLayout)) {
-    const bands = state.frame.features[channel];
+    const bands = state.frame.normalized_features?.[channel] || state.frame.features[channel];
     if (!bands) continue;
-    const alpha = bands.alpha || 0;
-    const total = Object.values(bands).reduce((sum, value) => sum + value, 0) || 1e-18;
-    const alphaShare = alpha / total;
+    const dominantBand = state.frame.summary.dominant_rhythm || "alpha";
+    const bandPower = bands[dominantBand] || 0;
+    const confidence = numberOrZero(state.frame.summary.measurement_confidence || 1);
     const x = width * point.x;
     const y = height * point.y;
-    const radius = 5 + Math.min(16, alphaShare * 34);
+    const radius = 3 + Math.min(16, bandPower * 17);
 
     const glow = headCtx.createRadialGradient(x, y, 2, x, y, radius * 3.4);
-    glow.addColorStop(0, `rgba(255, 228, 92, ${0.36 + alphaShare * 0.46})`);
-    glow.addColorStop(1, "rgba(255, 228, 92, 0)");
+    glow.addColorStop(0, colorWithAlpha(bandColors[dominantBand] || bandColors.alpha, (0.18 + bandPower * 0.5) * confidence));
+    glow.addColorStop(1, colorWithAlpha(bandColors[dominantBand] || bandColors.alpha, 0));
     headCtx.fillStyle = glow;
     headCtx.beginPath();
     headCtx.arc(x, y, radius * 3.4, 0, Math.PI * 2);
     headCtx.fill();
 
-    headCtx.fillStyle = bandColors[state.frame.summary.dominant_rhythm] || "#f4f7f4";
+    headCtx.fillStyle = colorWithAlpha(bandColors[dominantBand] || "#f4f7f4", 0.38 + bandPower * 0.54 * confidence);
     headCtx.beginPath();
     headCtx.arc(x, y, radius, 0, Math.PI * 2);
     headCtx.fill();
@@ -836,6 +847,17 @@ function drawHeadmap() {
     headCtx.fillText(channel, point.x > 0.7 ? x - 9 : x + 9, y + 4);
     headCtx.textAlign = "left";
   }
+}
+
+function electrodePoint(montageX, montageY, region) {
+  const frontY = 0.0848959;
+  const backY = -0.112449;
+  const maxAbsX = 0.0671179;
+  return {
+    x: 0.19 + ((frontY - montageY) / (frontY - backY)) * 0.62,
+    y: 0.5 + (montageX / maxAbsX) * 0.17,
+    region,
+  };
 }
 
 function animate() {

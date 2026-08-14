@@ -19,6 +19,10 @@ def test_synthetic_replay_emits_alpha_summary() -> None:
     assert "hemispheric_balance" in frames[0]["summary"]
     assert "posterior_alpha_asymmetry" in frames[0]["summary"]
     assert "spectral_spread" in frames[0]["summary"]
+    assert "measurement_confidence" in frames[0]["summary"]
+    assert "normalized_features" in frames[0]
+    assert "normalized_bands" in frames[0]
+    assert frames[0]["scaling"]["display_band_power_unit"] == "uV^2"
     assert "O1" in frames[0]["raw_preview"]
     assert frames[0]["state"] == "eyes_open"
     assert frames[-1]["state"] == "eyes_closed"

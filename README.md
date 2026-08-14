@@ -53,16 +53,18 @@ python -m neuromirror.cli dashboard
 
 ## What It Tracks
 
-- Delta, theta, alpha, beta, and gamma bandpower
+- Delta, theta, alpha, beta, and gamma integrated bandpower in µV²
 - Alpha reactivity during eyes-open / eyes-closed replay
-- Simple channel quality signals
+- Recording-level robust log-power normalization, so windows are scaled against the session instead of against themselves
+- Simple channel quality and measurement confidence signals
 - Blink-like artifact flags
 - Peak non-delta rhythm, signal amplitude, spectral spread, and artifact intensity
 - Hemispheric alpha balance and O1/O2 posterior alpha asymmetry
-- Sagittal EEG projection for selected frontal, central, and occipital scalp channels
+- Sagittal EEG spectral projection for selected frontal, central, and occipital scalp channels
+- 10-20 montage-derived inset coordinates for Fp1/Fp2, C3/C4, and O1/O2
 - Region summaries for future visual mapping
 
-NeuroMirror does not claim EEG source localization. The visualizer projects real scalp-channel features onto a sagittal anatomy view so posterior alpha, frontal blink artifacts, central activity, and channel quality remain interpretable without pretending the signal is a direct map of activity moving through brain tissue.
+NeuroMirror does not claim EEG source localization or cortical activation mapping. The visualizer shows a history of changing spectral power from scalp electrodes. Bright points are electrode-derived observations; softer traces between them are interpolation for readability, not evidence that a rhythm physically traveled through tissue.
 
 ## Project Shape
 

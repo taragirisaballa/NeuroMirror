@@ -25,27 +25,100 @@ def replay_frames(
     labels: list[str],
     config: ReplayConfig,
 ) -> Iterator[dict[str, object]]:
+    frames: list[dict[str, object]] = []
     for end in range(config.window_samples, data.shape[1] + 1, config.step_samples):
         start = end - config.window_samples
         window = data[:, start:end]
         features = bandpower_by_channel(window, config.sample_rate_hz, config.channels)
-        yield {
-            "time_s": round(float(times[end - 1]), 3),
-            "state": labels[end - 1],
-            "features": features,
-            "raw_preview": _raw_preview(window, config.channels),
-            "summary": {
-                "posterior_alpha_ratio": posterior_alpha_ratio(features),
-                "blink_like_artifact": detect_blink_like_artifact(window, config.channels),
-                "artifact_intensity": artifact_intensity(window, config.channels),
-                "channel_quality": channel_quality(window, config.channels),
-                "dominant_rhythm": dominant_rhythm(features),
-                "signal_amplitude_uv": signal_amplitude_uv(window),
-                "hemispheric_balance": hemispheric_balance(features),
-                "posterior_alpha_asymmetry": posterior_alpha_asymmetry(features),
-                "spectral_spread": spectral_spread(features),
-            },
+        summary = {
+            "posterior_alpha_ratio": posterior_alpha_ratio(features),
+            "blink_like_artifact": detect_blink_like_artifact(window, config.channels),
+            "artifact_intensity": artifact_intensity(window, config.channels),
+            "channel_quality": channel_quality(window, config.channels),
+            "dominant_rhythm": dominant_rhythm(features),
+            "signal_amplitude_uv": signal_amplitude_uv(window),
+            "hemispheric_balance": hemispheric_balance(features),
+            "posterior_alpha_asymmetry": posterior_alpha_asymmetry(features),
+            "spectral_spread": spectral_spread(features),
         }
+        summary["measurement_confidence"] = measurement_confidence(summary)
+        frames.append(
+            {
+                "time_s": round(float(times[end - 1]), 3),
+                "state": labels[end - 1],
+                "features": features,
+                "raw_preview": _raw_preview(window, config.channels),
+                "summary": summary,
+            },
+        )
+
+    if not frames:
+        return
+
+    scaling = robust_band_scaling([frame["features"] for frame in frames])
+    for frame in frames:
+        normalized_features = normalize_features(frame["features"], scaling)
+        frame["normalized_features"] = normalized_features
+        frame["normalized_bands"] = average_normalized_bands(normalized_features)
+        frame["scaling"] = {
+            "band_power_unit": "V^2",
+            "display_band_power_unit": "uV^2",
+            "normalization": "log10 integrated band power, recording-level 5th-95th percentile scaling",
+        }
+        yield frame
+
+
+def measurement_confidence(summary: dict[str, object]) -> float:
+    artifact = float(summary.get("artifact_intensity", 0.0))
+    qualities = dict(summary.get("channel_quality", {}))
+    if not qualities:
+        quality_confidence = 1.0
+    else:
+        scores = [1.0 if value == "ok" else 0.45 if value == "noisy" else 0.0 for value in qualities.values()]
+        quality_confidence = float(np.mean(scores))
+    return round(float(np.clip((1.0 - artifact * 0.78) * quality_confidence, 0.05, 1.0)), 3)
+
+
+def robust_band_scaling(frames: list[dict[str, dict[str, float]]]) -> dict[str, dict[str, float]]:
+    band_values: dict[str, list[float]] = {}
+    for features in frames:
+        for channel_bands in features.values():
+            for band, value in channel_bands.items():
+                band_values.setdefault(band, []).append(float(value))
+
+    scaling: dict[str, dict[str, float]] = {}
+    for band, values in band_values.items():
+        log_values = np.log10(np.asarray(values, dtype=float) + 1e-24)
+        low, high = np.percentile(log_values, [5, 95])
+        if high <= low:
+            high = low + 1.0
+        scaling[band] = {"log_p05": float(low), "log_p95": float(high)}
+    return scaling
+
+
+def normalize_features(
+    features: dict[str, dict[str, float]],
+    scaling: dict[str, dict[str, float]],
+) -> dict[str, dict[str, float]]:
+    normalized: dict[str, dict[str, float]] = {}
+    for channel, bands in features.items():
+        normalized[channel] = {}
+        for band, value in bands.items():
+            band_scaling = scaling[band]
+            log_value = float(np.log10(value + 1e-24))
+            scaled = (log_value - band_scaling["log_p05"]) / (band_scaling["log_p95"] - band_scaling["log_p05"])
+            normalized[channel][band] = round(float(np.clip(scaled, 0.0, 1.0)), 4)
+    return normalized
+
+
+def average_normalized_bands(normalized_features: dict[str, dict[str, float]]) -> dict[str, float]:
+    totals: dict[str, float] = {}
+    counts: dict[str, int] = {}
+    for channel_bands in normalized_features.values():
+        for band, value in channel_bands.items():
+            totals[band] = totals.get(band, 0.0) + value
+            counts[band] = counts.get(band, 0) + 1
+    return {band: round(total / counts[band], 4) for band, total in totals.items()}
 
 
 def print_replay(

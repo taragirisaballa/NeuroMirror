@@ -24,10 +24,10 @@
             <span class="pause-icon" aria-hidden="true"></span>
           </button>
         </div>
-        <div class="anatomy-panel" aria-label="Sagittal EEG projection">
+        <div class="anatomy-panel" aria-label="Sagittal EEG spectral projection">
           <div class="module-heading">
-            <h2>EEG Projection</h2>
-            <span>sagittal scalp</span>
+            <h2>EEG Spectral Projection</h2>
+            <span>10-20 montage</span>
           </div>
           <canvas id="headmap"></canvas>
         </div>
@@ -37,7 +37,7 @@
         <section class="module">
           <div class="module-heading">
             <h2>Brain Rhythms</h2>
-            <span id="artifact">stream warming</span>
+            <span id="artifact">integrated bandpower, µV²</span>
           </div>
           <div id="bands" class="bands"></div>
         </section>
@@ -45,7 +45,7 @@
         <section class="module">
           <div class="module-heading">
             <h2>Raw Signal</h2>
-            <span>microvolts</span>
+            <span>µV</span>
           </div>
           <canvas id="traces"></canvas>
         </section>
@@ -57,7 +57,7 @@
           </div>
           <div class="metrics">
             <div><span class="label">Peak Rhythm</span><strong id="dominant">waiting</strong></div>
-            <div><span class="label">Amplitude</span><strong id="amplitude">0 uV</strong></div>
+            <div><span class="label">Amplitude</span><strong id="amplitude">0 µV</strong></div>
             <div><span class="label">Artifact Intensity</span><strong id="artifact-intensity">0%</strong></div>
             <div><span class="label">Spectral Spread</span><strong id="spread">0%</strong></div>
             <div><span class="label">Left / Right Alpha</span><strong id="balance">centered</strong></div>
@@ -71,7 +71,7 @@
             <strong id="alpha-ratio">0.00x</strong>
           </div>
           <div>
-            <span class="label">Channel Quality</span>
+            <span class="label">Measurement Confidence</span>
             <strong id="quality">waiting</strong>
           </div>
         </section>
