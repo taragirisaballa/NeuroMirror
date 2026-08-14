@@ -1,0 +1,16 @@
+name: eyes-open-closed-alpha-reactivity
+description: Replay an EEG session with eyes-open and eyes-closed segments to visualize posterior alpha changes.
+source:
+  type: synthetic
+  future_openneuro_dataset: ds007615
+stream:
+  sample_rate_hz: 256
+  window_seconds: 2.0
+  step_seconds: 0.25
+features:
+  bands_hz:
+    delta: [1, 4]
+    theta: [4, 8]
+    alpha: [8, 13]
+    beta: [13, 30]
+    gamma: [30, 45]

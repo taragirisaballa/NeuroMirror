@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neuromirror"
+version = "0.1.0"
+description = "Raspberry Pi-powered EEG observatory for replaying, analyzing, and visualizing brainwave data."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+openneuro = [
+  "mne>=1.6",
+  "mne-bids>=0.14",
+  "openneuro-py>=2024.2.0",
+]
+dev = [
+  "pytest>=7.4",
+]
+
+[project.scripts]
+neuromirror = "neuromirror.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["neuromirror*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
