@@ -27,12 +27,39 @@ const bandColors = {
   gamma: "#ff5a53",
 };
 
+const brainRegions = {
+  frontal: { x: 0.36, y: 0.43, rx: 0.23, ry: 0.18, color: "rgba(77, 246, 255, 0.14)" },
+  central: { x: 0.54, y: 0.42, rx: 0.2, ry: 0.2, color: "rgba(141, 255, 122, 0.13)" },
+  temporal: { x: 0.52, y: 0.59, rx: 0.26, ry: 0.13, color: "rgba(255, 78, 163, 0.12)" },
+  posterior: { x: 0.73, y: 0.45, rx: 0.2, ry: 0.19, color: "rgba(255, 228, 92, 0.13)" },
+  occipital: { x: 0.79, y: 0.52, rx: 0.14, ry: 0.17, color: "rgba(255, 90, 83, 0.13)" },
+};
+
+const channelRegions = {
+  Fp1: "frontal",
+  Fp2: "frontal",
+  C3: "central",
+  C4: "central",
+  O1: "occipital",
+  O2: "occipital",
+};
+
+const bandRegionBias = {
+  delta: "central",
+  theta: "temporal",
+  alpha: "occipital",
+  beta: "frontal",
+  gamma: "posterior",
+};
+
 const particles = Array.from({ length: 72 }, (_, index) => ({
   angle: (Math.PI * 2 * index) / 72,
-  radius: 42 + (index % 9) * 7,
+  radius: 0.12 + (index % 9) * 0.014,
   trail: [],
   speed: 0.004 + (index % 11) * 0.0008,
   band: ["delta", "theta", "alpha", "beta", "gamma"][index % 5],
+  channel: ["Fp1", "Fp2", "C3", "C4", "O1", "O2"][index % 6],
+  region: ["frontal", "central", "temporal", "posterior", "occipital"][index % 5],
 }));
 
 const state = {
@@ -182,39 +209,42 @@ function drawField() {
   const rect = field.getBoundingClientRect();
   const width = rect.width;
   const height = rect.height;
-  const centerX = width * 0.48;
-  const centerY = height * 0.55;
+  const brain = brainBox(width, height);
   const alpha = state.normalized.alpha || 0.2;
   const theta = state.normalized.theta || 0.2;
   const beta = state.normalized.beta || 0.2;
   const gamma = state.normalized.gamma || 0.2;
   state.phase += 0.012 + beta * 0.018;
 
-  fieldCtx.fillStyle = "rgba(3, 4, 6, 0.18)";
+  fieldCtx.fillStyle = "rgba(3, 4, 6, 0.2)";
   fieldCtx.fillRect(0, 0, width, height);
+  drawBrainMesh(fieldCtx, brain, alpha, theta);
 
-  const bloom = 90 + alpha * 210;
-  const glow = fieldCtx.createRadialGradient(centerX, centerY, 10, centerX, centerY, bloom);
-  glow.addColorStop(0, `rgba(255, 228, 92, ${0.18 + alpha * 0.25})`);
+  const glow = fieldCtx.createRadialGradient(brain.cx, brain.cy, 10, brain.cx, brain.cy, brain.rx * 1.18);
+  glow.addColorStop(0, `rgba(255, 228, 92, ${0.1 + alpha * 0.18})`);
   glow.addColorStop(0.42, `rgba(77, 246, 255, ${0.08 + theta * 0.1})`);
   glow.addColorStop(1, "rgba(3, 4, 6, 0)");
   fieldCtx.fillStyle = glow;
   fieldCtx.beginPath();
-  fieldCtx.arc(centerX, centerY, bloom, 0, Math.PI * 2);
+  fieldCtx.ellipse(brain.cx, brain.cy, brain.rx * 1.08, brain.ry * 1.08, -0.08, 0, Math.PI * 2);
   fieldCtx.fill();
 
   for (const particle of particles) {
     const drive = state.normalized[particle.band] || 0.18;
+    const channelDrive = channelIntensity(particle.channel);
+    const regionName = channelRegions[particle.channel] || bandRegionBias[particle.band] || particle.region;
+    const region = brainRegions[regionName];
+    const target = regionPoint(brain, region, particle.angle, particle.radius, drive, channelDrive);
     particle.angle += particle.speed + drive * 0.026;
-    const wobble = Math.sin(state.phase * (1.2 + drive) + particle.radius) * (16 + gamma * 44);
-    const radius = particle.radius + alpha * 72 + wobble;
-    const x = centerX + Math.cos(particle.angle * 1.7) * radius + Math.sin(state.phase + particle.angle) * 80 * theta;
-    const y = centerY + Math.sin(particle.angle * 1.15) * radius * 0.72 + Math.cos(state.phase * 0.7 + particle.angle) * 52 * beta;
+    const flow = flowPointBetweenRegions(brain, particle, drive, channelDrive);
+    const blend = 0.58 + drive * 0.22;
+    const x = target.x * blend + flow.x * (1 - blend);
+    const y = target.y * blend + flow.y * (1 - blend);
     particle.trail.push({ x, y });
-    if (particle.trail.length > 44) particle.trail.shift();
+    if (particle.trail.length > 54) particle.trail.shift();
 
     fieldCtx.strokeStyle = bandColors[particle.band];
-    fieldCtx.lineWidth = 1 + drive * 2.2;
+    fieldCtx.lineWidth = 0.9 + drive * 2.1 + channelDrive * 0.9;
     fieldCtx.shadowBlur = 20 + drive * 28;
     fieldCtx.shadowColor = bandColors[particle.band];
     fieldCtx.beginPath();
@@ -226,10 +256,144 @@ function drawField() {
 
     fieldCtx.fillStyle = "#f9fff8";
     fieldCtx.beginPath();
-    fieldCtx.arc(x, y, 1.5 + drive * 2.2, 0, Math.PI * 2);
+    fieldCtx.arc(x, y, 1.3 + drive * 1.6 + channelDrive * 1.7, 0, Math.PI * 2);
     fieldCtx.fill();
   }
+  drawRegionLabels(fieldCtx, brain);
   fieldCtx.shadowBlur = 0;
+}
+
+function brainBox(width, height) {
+  const availableWidth = width * 0.72;
+  return {
+    cx: width * 0.5,
+    cy: height * 0.54,
+    rx: Math.min(availableWidth * 0.48, height * 0.43),
+    ry: Math.min(width * 0.26, height * 0.28),
+  };
+}
+
+function drawBrainMesh(ctx, brain, alpha, theta) {
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  const lobes = Object.values(brainRegions);
+  for (const region of lobes) {
+    const x = brain.cx + (region.x - 0.5) * brain.rx * 2;
+    const y = brain.cy + (region.y - 0.5) * brain.ry * 2;
+    const glow = ctx.createRadialGradient(x, y, 8, x, y, brain.rx * region.rx * 2.2);
+    glow.addColorStop(0, region.color);
+    glow.addColorStop(1, "rgba(3,4,6,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.ellipse(x, y, brain.rx * region.rx * 2.1, brain.ry * region.ry * 2.1, -0.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.strokeStyle = `rgba(244, 247, 244, ${0.24 + alpha * 0.1})`;
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.ellipse(brain.cx, brain.cy, brain.rx, brain.ry, -0.12, Math.PI * 0.06, Math.PI * 1.9);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(brain.cx - brain.rx * 1.02, brain.cy - brain.ry * 0.08);
+  ctx.lineTo(brain.cx - brain.rx * 1.15, brain.cy);
+  ctx.lineTo(brain.cx - brain.rx * 1.02, brain.cy + brain.ry * 0.08);
+  ctx.stroke();
+
+  for (let i = 0; i < 92; i += 1) {
+    const start = seededBrainPoint(brain, i, 0.78);
+    const end = seededBrainPoint(brain, i * 7 + 11, 0.84);
+    const color = Object.values(bandColors)[i % 5];
+    ctx.strokeStyle = colorWithAlpha(color, 0.13 + theta * 0.06);
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    const control = seededBrainPoint(brain, i * 13 + 5, 0.42);
+    ctx.quadraticCurveTo(control.x, control.y, end.x, end.y);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = "rgba(244,247,244,0.15)";
+  ctx.lineWidth = 0.9;
+  for (const region of Object.values(brainRegions)) {
+    const x = brain.cx + (region.x - 0.5) * brain.rx * 2;
+    const y = brain.cy + (region.y - 0.5) * brain.ry * 2;
+    ctx.beginPath();
+    ctx.ellipse(x, y, brain.rx * region.rx * 1.2, brain.ry * region.ry * 1.2, -0.1, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function seededBrainPoint(brain, seed, scale) {
+  const angle = (seed * 2.399963229728653) % (Math.PI * 2);
+  const radius = Math.sqrt(((seed * 9301 + 49297) % 233280) / 233280) * scale;
+  return {
+    x: brain.cx + Math.cos(angle) * brain.rx * radius,
+    y: brain.cy + Math.sin(angle) * brain.ry * radius * (0.82 + 0.18 * Math.cos(angle)),
+  };
+}
+
+function regionPoint(brain, region, angle, radius, drive, channelDrive) {
+  const centerX = brain.cx + (region.x - 0.5) * brain.rx * 2;
+  const centerY = brain.cy + (region.y - 0.5) * brain.ry * 2;
+  const wobble = Math.sin(state.phase * (1.4 + drive) + radius * 40) * (0.03 + channelDrive * 0.08);
+  const localRadius = radius + wobble + drive * 0.05;
+  return {
+    x: centerX + Math.cos(angle * 1.7) * brain.rx * region.rx * localRadius * 3.4,
+    y: centerY + Math.sin(angle * 1.15) * brain.ry * region.ry * localRadius * 3.2,
+  };
+}
+
+function flowPointBetweenRegions(brain, particle, drive, channelDrive) {
+  const from = brainRegions[particle.region];
+  const to = brainRegions[bandRegionBias[particle.band]];
+  const t = (Math.sin(state.phase * (0.7 + drive) + particle.angle * 2) + 1) / 2;
+  const x1 = brain.cx + (from.x - 0.5) * brain.rx * 2;
+  const y1 = brain.cy + (from.y - 0.5) * brain.ry * 2;
+  const x2 = brain.cx + (to.x - 0.5) * brain.rx * 2;
+  const y2 = brain.cy + (to.y - 0.5) * brain.ry * 2;
+  return {
+    x: x1 + (x2 - x1) * t + Math.sin(particle.angle * 3 + state.phase) * brain.rx * 0.08 * channelDrive,
+    y: y1 + (y2 - y1) * t + Math.cos(particle.angle * 2 + state.phase) * brain.ry * 0.1 * drive,
+  };
+}
+
+function channelIntensity(channel) {
+  const bands = state.frame?.features?.[channel];
+  if (!bands) return 0.2;
+  const total = Object.values(bands).reduce((sum, value) => sum + value, 0) || 1e-18;
+  return Math.min(1, total / (total + 4e-11));
+}
+
+function colorWithAlpha(hex, alpha) {
+  const value = hex.replace("#", "");
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function drawRegionLabels(ctx, brain) {
+  ctx.save();
+  ctx.fillStyle = "rgba(244,247,244,0.58)";
+  ctx.font = "700 11px ui-sans-serif, system-ui";
+  ctx.textAlign = "center";
+  const labels = [
+    ["frontal", brainRegions.frontal],
+    ["central", brainRegions.central],
+    ["occipital", brainRegions.occipital],
+  ];
+  for (const [label, region] of labels) {
+    const x = brain.cx + (region.x - 0.5) * brain.rx * 2;
+    const y = brain.cy + (region.y - 0.5) * brain.ry * 2 - brain.ry * region.ry * 1.5;
+    ctx.fillText(label, x, y);
+  }
+  ctx.restore();
 }
 
 function drawTraces() {

@@ -132,9 +132,9 @@ h2 {
   position: absolute;
   top: 210px;
   right: 28px;
-  width: min(340px, calc(100% - 56px));
+  width: min(300px, calc(100% - 56px));
   border: 1px solid var(--line);
-  background: rgba(3, 4, 6, 0.5);
+  background: rgba(3, 4, 6, 0.42);
   padding: 14px;
   backdrop-filter: blur(14px);
 }
