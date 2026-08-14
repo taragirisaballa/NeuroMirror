@@ -8,6 +8,7 @@ const artifactEl = document.querySelector("#artifact");
 const alphaRatioEl = document.querySelector("#alpha-ratio");
 const qualityEl = document.querySelector("#quality");
 const bandsEl = document.querySelector("#bands");
+const sourceButtons = [...document.querySelectorAll("[data-source]")];
 
 const bandColors = {
   delta: "#4df6ff",
@@ -55,18 +56,37 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-const stream = new EventSource("/api/stream?seconds=24&speed=1.35");
-stream.onmessage = (event) => {
-  const frame = JSON.parse(event.data);
-  state.frame = frame;
-  state.bands = averageBands(frame.features);
-  state.normalized = normalizeBands(state.bands);
-  updateHud(frame);
-};
+let stream = null;
+let activeSource = "synthetic";
 
-stream.onerror = () => {
-  artifactEl.textContent = "stream reconnecting";
-};
+sourceButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    activeSource = button.dataset.source;
+    sourceButtons.forEach((item) => item.classList.toggle("active", item === button));
+    connectStream();
+  });
+});
+
+function connectStream() {
+  if (stream) stream.close();
+  stateEl.textContent = "connecting";
+  artifactEl.textContent = activeSource === "openneuro" ? "loading real EEG" : "stream warming";
+  const params = new URLSearchParams({ source: activeSource, seconds: "24", speed: "1.35" });
+  stream = new EventSource(`/api/stream?${params}`);
+  stream.onmessage = (event) => {
+    const frame = JSON.parse(event.data);
+    state.frame = frame;
+    state.bands = averageBands(frame.features);
+    state.normalized = normalizeBands(state.bands);
+    updateHud(frame);
+  };
+  stream.onerror = () => {
+    artifactEl.textContent = activeSource === "openneuro" ? "real EEG not found" : "stream reconnecting";
+    artifactEl.style.color = "var(--yellow)";
+  };
+}
+
+connectStream();
 
 function averageBands(features) {
   const bands = { delta: 0, theta: 0, alpha: 0, beta: 0, gamma: 0 };

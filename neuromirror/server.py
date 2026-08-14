@@ -8,11 +8,13 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from neuromirror.config import ReplayConfig
+from neuromirror.openneuro_replay import DEFAULT_DATASET, DEFAULT_SUBJECT, default_openneuro_root, load_openneuro_replay
 from neuromirror.processing.filters import bandpass
 from neuromirror.replay import replay_frames
 from neuromirror.synthetic import generate_eyes_open_closed
 
 WEB_ROOT = Path(__file__).resolve().parent.parent / "web"
+OPENNEURO_CACHE: dict[tuple[str, str, float], tuple[object, object, object]] = {}
 
 
 class NeuroMirrorHandler(BaseHTTPRequestHandler):
@@ -43,6 +45,7 @@ class NeuroMirrorHandler(BaseHTTPRequestHandler):
         seconds = _float_query(query, "seconds", 24.0)
         speed = _float_query(query, "speed", 1.0)
         seed = int(_float_query(query, "seed", 7))
+        source = query.get("source", ["synthetic"])[0]
         config = ReplayConfig(speed=speed)
 
         self.send_response(200)
@@ -52,9 +55,24 @@ class NeuroMirrorHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
         while True:
-            data, times, labels = generate_eyes_open_closed(config, seconds=seconds, seed=seed)
-            filtered = bandpass(data, sample_rate_hz=config.sample_rate_hz)
-            for frame in replay_frames(filtered, times, labels, config):
+            if source == "openneuro":
+                dataset = query.get("dataset", [DEFAULT_DATASET])[0]
+                subject = query.get("subject", [DEFAULT_SUBJECT])[0]
+                dataset_root = default_openneuro_root() / dataset
+                cache_key = (dataset, subject, seconds)
+                if cache_key not in OPENNEURO_CACHE:
+                    OPENNEURO_CACHE[cache_key] = load_openneuro_replay(
+                        config,
+                        dataset_root=dataset_root,
+                        subject=subject,
+                        seconds_per_state=seconds / 2,
+                    )
+                data, times, labels = OPENNEURO_CACHE[cache_key]
+            else:
+                data, times, labels = generate_eyes_open_closed(config, seconds=seconds, seed=seed)
+                data = bandpass(data, sample_rate_hz=config.sample_rate_hz)
+
+            for frame in replay_frames(data, times, labels, config):
                 try:
                     self.wfile.write(f"data: {json.dumps(frame)}\n\n".encode("utf-8"))
                     self.wfile.flush()

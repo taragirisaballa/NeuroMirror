@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from neuromirror.config import ReplayConfig
+from neuromirror.openneuro_replay import DEFAULT_ACQUISITION, DEFAULT_DATASET, DEFAULT_SESSION, DEFAULT_SUBJECT
 from neuromirror.processing.filters import bandpass
 from neuromirror.replay import print_replay, replay_frames
 from neuromirror.synthetic import generate_eyes_open_closed
@@ -13,15 +15,24 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     replay = subparsers.add_parser("replay", help="Replay an EEG source as newline-delimited JSON.")
-    replay.add_argument("--source", choices=["synthetic"], default="synthetic")
+    replay.add_argument("--source", choices=["synthetic", "openneuro"], default="synthetic")
     replay.add_argument("--seconds", type=float, default=12.0)
     replay.add_argument("--speed", type=float, default=1.0)
     replay.add_argument("--realtime", action="store_true")
     replay.add_argument("--seed", type=int, default=7)
+    replay.add_argument("--dataset-root", type=Path, default=Path("data/openneuro/ds005385"))
+    replay.add_argument("--subject", default=DEFAULT_SUBJECT)
 
     dashboard = subparsers.add_parser("dashboard", help="Run the local NeuroMirror visual dashboard.")
     dashboard.add_argument("--host", default="127.0.0.1")
     dashboard.add_argument("--port", type=int, default=8765)
+
+    fetch = subparsers.add_parser("fetch-openneuro", help="Download one OpenNeuro subject for real EEG replay.")
+    fetch.add_argument("--dataset", default=DEFAULT_DATASET)
+    fetch.add_argument("--subject", default=DEFAULT_SUBJECT)
+    fetch.add_argument("--session", default=DEFAULT_SESSION)
+    fetch.add_argument("--acquisition", default=DEFAULT_ACQUISITION)
+    fetch.add_argument("--target-dir", type=Path, default=Path("data/openneuro"))
     return parser
 
 
@@ -30,15 +41,40 @@ def main() -> None:
 
     if args.command == "replay":
         config = ReplayConfig(speed=args.speed)
-        data, times, labels = generate_eyes_open_closed(config, seconds=args.seconds, seed=args.seed)
-        filtered = bandpass(data, sample_rate_hz=config.sample_rate_hz)
-        frames = replay_frames(filtered, times, labels, config)
+        if args.source == "openneuro":
+            from neuromirror.openneuro_replay import load_openneuro_replay
+
+            data, times, labels = load_openneuro_replay(
+                config,
+                dataset_root=args.dataset_root,
+                subject=args.subject,
+                seconds_per_state=args.seconds / 2,
+            )
+        else:
+            data, times, labels = generate_eyes_open_closed(config, seconds=args.seconds, seed=args.seed)
+            data = bandpass(data, sample_rate_hz=config.sample_rate_hz)
+        frames = replay_frames(data, times, labels, config)
         print_replay(frames, config, realtime=args.realtime)
 
     if args.command == "dashboard":
         from neuromirror.server import run_dashboard
 
         run_dashboard(host=args.host, port=args.port)
+
+    if args.command == "fetch-openneuro":
+        from neuromirror.openneuro_replay import fetch_openneuro_subset, recording_paths
+
+        print(f"Fetching {args.dataset} subject {args.subject} ({args.acquisition})")
+        for path in recording_paths(args.dataset, args.subject, args.session, args.acquisition):
+            print(f"  include {path}")
+        dataset_root = fetch_openneuro_subset(
+            dataset=args.dataset,
+            subject=args.subject,
+            session=args.session,
+            acquisition=args.acquisition,
+            target_dir=args.target_dir,
+        )
+        print(f"OpenNeuro subset ready at {dataset_root}")
 
 
 if __name__ == "__main__":

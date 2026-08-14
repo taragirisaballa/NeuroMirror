@@ -92,6 +92,37 @@ h2 {
   backdrop-filter: blur(14px);
 }
 
+.source-panel {
+  position: absolute;
+  right: 28px;
+  bottom: 28px;
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  background: rgba(3, 4, 6, 0.58);
+  backdrop-filter: blur(14px);
+}
+
+.source-panel button {
+  appearance: none;
+  min-height: 34px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 12px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.source-panel button.active {
+  border-color: rgba(77, 246, 255, 0.42);
+  color: var(--text);
+  background: rgba(77, 246, 255, 0.11);
+}
+
 .state-panel strong {
   font-size: 1.4rem;
   text-transform: capitalize;
@@ -203,5 +234,10 @@ h2 {
     min-height: auto;
     border-left: 0;
     border-top: 1px solid var(--line);
+  }
+
+  .source-panel {
+    right: 18px;
+    bottom: 18px;
   }
 }

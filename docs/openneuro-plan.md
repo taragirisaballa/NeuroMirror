@@ -6,12 +6,14 @@ Version 1 uses synthetic EEG so the pipeline can run anywhere. Version 2 should 
 
 Candidate: `ds007615`, a resting-state EEG dataset with eyes-open and eyes-closed conditions.
 
+Current implementation target: `ds005385`, a 64-channel resting-state EEG dataset with `EyesOpen` and `EyesClosed` tasks.
+
 ## Planned Loader
 
 The OpenNeuro loader should:
 
-1. Download or locate a BIDS dataset.
-2. Load one subject/session with MNE-BIDS.
+1. Download or locate one subject/session from a BIDS dataset.
+2. Load eyes-open and eyes-closed EDF recordings with MNE.
 3. Select EEG channels and event annotations.
 4. Resample to a Pi-friendly stream rate.
 5. Emit the same array/timestamp/label shape used by the synthetic replay.

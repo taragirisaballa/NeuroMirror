@@ -26,7 +26,7 @@ The current repo includes a synthetic EEG replay so the pipeline can run before 
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-neuromirror replay --source synthetic --seconds 12
+python -m neuromirror.cli replay --source synthetic --seconds 12
 ```
 
 You should see newline-delimited JSON frames with timestamped EEG features.
@@ -34,10 +34,22 @@ You should see newline-delimited JSON frames with timestamped EEG features.
 To launch the first visual dashboard:
 
 ```bash
-neuromirror dashboard
+python -m neuromirror.cli dashboard
 ```
 
 Then open `http://127.0.0.1:8765`.
+
+## Real EEG Replay
+
+NeuroMirror's default dashboard uses a synthetic EEG-like stream so the visual system works immediately. To replay real EEG, install the optional OpenNeuro dependencies and fetch one subject from `ds005385`:
+
+```bash
+pip install -e ".[openneuro,dev]"
+python -m neuromirror.cli fetch-openneuro --dataset ds005385 --subject 001
+python -m neuromirror.cli dashboard
+```
+
+In the dashboard, switch from `Synthetic Demo` to `Real EEG`.
 
 ## What It Tracks
 
