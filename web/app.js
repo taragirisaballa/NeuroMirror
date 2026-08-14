@@ -51,14 +51,26 @@ const bandRegionBias = {
   gamma: "posterior",
 };
 
+const signalRoutes = [
+  { name: "left anterior-posterior", channels: ["Fp1", "C3", "O1"] },
+  { name: "right anterior-posterior", channels: ["Fp2", "C4", "O2"] },
+  { name: "frontal symmetry", channels: ["Fp1", "Fp2"] },
+  { name: "central symmetry", channels: ["C3", "C4"] },
+  { name: "posterior alpha synchrony", channels: ["O1", "O2"] },
+  { name: "left global field", channels: ["Fp1", "C4", "O1"] },
+  { name: "right global field", channels: ["Fp2", "C3", "O2"] },
+];
+
 const particles = Array.from({ length: 42 }, (_, index) => ({
   angle: (Math.PI * 2 * index) / 72,
   radius: 0.12 + (index % 9) * 0.014,
+  progress: (index % 17) / 17,
   trail: [],
   speed: 0.004 + (index % 11) * 0.0008,
   band: ["delta", "theta", "alpha", "beta", "gamma"][index % 5],
   channel: ["Fp1", "Fp2", "C3", "C4", "O1", "O2"][index % 6],
   region: ["frontal", "central", "temporal", "posterior", "occipital"][index % 5],
+  route: signalRoutes[index % signalRoutes.length],
 }));
 
 const state = {
@@ -224,22 +236,19 @@ function drawField() {
   traceBrainPath(fieldCtx, brain);
   fieldCtx.clip();
   for (const particle of particles) {
-    const drive = state.normalized[particle.band] || 0.18;
-    const channelDrive = channelIntensity(particle.channel);
-    const regionName = channelRegions[particle.channel] || bandRegionBias[particle.band] || particle.region;
-    const region = brainRegions[regionName];
-    const target = regionPoint(brain, region, particle.angle, particle.radius, drive, channelDrive);
-    particle.angle += particle.speed + drive * 0.014;
-    const flow = flowPointBetweenRegions(brain, particle, drive, channelDrive);
-    const blend = 0.7 + drive * 0.14;
-    const x = target.x * blend + flow.x * (1 - blend);
-    const y = target.y * blend + flow.y * (1 - blend);
+    const drive = routeBandStrength(particle.route, particle.band);
+    const channelDrive = routeAmplitude(particle.route);
+    particle.progress = (particle.progress + particle.speed * (0.45 + bandSpeed(particle.band) * 0.1) + drive * 0.008) % 1;
+    particle.angle += particle.speed + drive * 0.01;
+    const point = routePoint(brain, particle.route, particle.progress, particle.angle, drive, channelDrive);
+    const x = point.x;
+    const y = point.y;
     particle.trail.push({ x, y });
-    if (particle.trail.length > 38) particle.trail.shift();
+    if (particle.trail.length > Math.round(18 + drive * 24)) particle.trail.shift();
 
     fieldCtx.strokeStyle = bandColors[particle.band];
-    fieldCtx.lineWidth = 0.8 + drive * 1.7 + channelDrive * 0.7;
-    fieldCtx.shadowBlur = 16 + drive * 20;
+    fieldCtx.lineWidth = 0.7 + drive * 2.0 + channelDrive * 0.5;
+    fieldCtx.shadowBlur = 12 + drive * 22;
     fieldCtx.shadowColor = bandColors[particle.band];
     fieldCtx.beginPath();
     particle.trail.forEach((point, index) => {
@@ -253,6 +262,7 @@ function drawField() {
     fieldCtx.arc(x, y, 1.6 + drive * 1.5 + channelDrive * 1.3, 0, Math.PI * 2);
     fieldCtx.fill();
   }
+  drawRouteNodes(fieldCtx, brain);
   fieldCtx.restore();
   drawRegionLabels(fieldCtx, brain);
   fieldCtx.shadowBlur = 0;
@@ -291,24 +301,6 @@ function drawBrainMesh(ctx, brain, alpha, theta) {
   ctx.beginPath();
   traceBrainPath(ctx, brain);
   ctx.stroke();
-
-  ctx.beginPath();
-  ctx.save();
-  traceBrainPath(ctx, brain);
-  ctx.clip();
-  for (let i = 0; i < 92; i += 1) {
-    const start = seededBrainPoint(brain, i, 0.78);
-    const end = seededBrainPoint(brain, i * 7 + 11, 0.84);
-    const color = Object.values(bandColors)[i % 5];
-    ctx.strokeStyle = colorWithAlpha(color, 0.13 + theta * 0.06);
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    const control = seededBrainPoint(brain, i * 13 + 5, 0.42);
-    ctx.quadraticCurveTo(control.x, control.y, end.x, end.y);
-    ctx.stroke();
-  }
-  ctx.restore();
 
   drawBrainstem(ctx, brain);
 
@@ -392,6 +384,92 @@ function flowPointBetweenRegions(brain, particle, drive, channelDrive) {
     x: x1 + (x2 - x1) * t + Math.sin(particle.angle * 3 + state.phase) * brain.rx * 0.08 * channelDrive,
     y: y1 + (y2 - y1) * t + Math.cos(particle.angle * 2 + state.phase) * brain.ry * 0.1 * drive,
   };
+}
+
+function routePoint(brain, route, progress, angle, drive, channelDrive) {
+  const points = route.channels.map((channel) => electrodePoint(brain, electrodeLayout[channel]));
+  const segmentCount = points.length - 1;
+  const scaled = progress * segmentCount;
+  const index = Math.min(segmentCount - 1, Math.floor(scaled));
+  const local = scaled - index;
+  const start = points[index];
+  const end = points[index + 1];
+  const eased = local * local * (3 - 2 * local);
+  const x = start.x + (end.x - start.x) * eased;
+  const y = start.y + (end.y - start.y) * eased;
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const normalX = -dy / length;
+  const normalY = dx / length;
+  const wobble = Math.sin(angle * 2.2 + state.phase * bandSpeed(routeBandForColor(route))) * brain.ry * (0.018 + drive * 0.018 + channelDrive * 0.012);
+  return {
+    x: x + normalX * wobble,
+    y: y + normalY * wobble,
+  };
+}
+
+function routeBandForColor(route) {
+  if (route.name.includes("posterior")) return "alpha";
+  if (route.name.includes("frontal")) return "beta";
+  return "theta";
+}
+
+function routeBandStrength(route, band) {
+  const values = route.channels.map((channel) => channelBandShare(channel, band));
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const posteriorAlpha =
+    band === "alpha" && route.channels.some((channel) => channel === "O1" || channel === "O2")
+      ? Math.min(0.35, Math.max(0, numberOrZero(state.frame?.summary?.posterior_alpha_ratio) - 1) * 0.16)
+      : 0;
+  const blink =
+    state.frame?.summary?.blink_like_artifact && route.channels.some((channel) => channel === "Fp1" || channel === "Fp2")
+      ? numberOrZero(state.frame.summary.artifact_intensity) * 0.16
+      : 0;
+  return Math.max(0.04, Math.min(1, mean * 0.78 + posteriorAlpha + blink));
+}
+
+function routeAmplitude(route) {
+  const values = route.channels.map((channel) => channelIntensity(channel));
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function channelBandShare(channel, band) {
+  const bands = state.frame?.features?.[channel];
+  if (!bands) return 0.1;
+  const total = Object.values(bands).reduce((sum, value) => sum + value, 0) || 1e-18;
+  return Math.min(1, ((bands[band] || 0) / total) * 3.8);
+}
+
+function electrodePoint(brain, point) {
+  return {
+    x: brain.cx + (point.x - 0.5) * brain.rx * 2,
+    y: brain.cy + (point.y - 0.5) * brain.ry * 2,
+  };
+}
+
+function drawRouteNodes(ctx, brain) {
+  ctx.save();
+  ctx.font = "700 11px ui-sans-serif, system-ui";
+  ctx.textAlign = "center";
+  for (const [channel, point] of Object.entries(electrodeLayout)) {
+    const pos = electrodePoint(brain, point);
+    const intensity = channelIntensity(channel);
+    ctx.shadowBlur = 14 + intensity * 18;
+    ctx.shadowColor = "#f9fff8";
+    ctx.fillStyle = "#f9fff8";
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 2.8 + intensity * 2.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(244,247,244,0.68)";
+    ctx.fillText(channel, pos.x, pos.y - 10);
+  }
+  ctx.restore();
+}
+
+function bandSpeed(band) {
+  return { delta: 1.1, theta: 2.0, alpha: 2.7, beta: 3.9, gamma: 4.8 }[band] || 2.4;
 }
 
 function channelIntensity(channel) {
