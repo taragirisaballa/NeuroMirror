@@ -51,6 +51,7 @@ const projectionAnchors = [
 ];
 
 const bandTracePhase = { delta: 0.2, theta: 1.1, alpha: 2.0, beta: 2.9, gamma: 3.8 };
+const bandLaneOffset = { delta: -28, theta: -14, alpha: 0, beta: 14, gamma: 28 };
 
 const state = {
   frame: null,
@@ -351,12 +352,35 @@ function drawBandProfile(ctx, brain, band, bandIndex) {
   ctx.lineJoin = "round";
   ctx.shadowColor = bandColors[band];
 
+  drawReferenceProfile(ctx, band, bandIndex, profile);
   for (let index = 0; index < profile.length - 1; index += 1) {
     drawMeasuredSegment(ctx, band, bandIndex, profile[index], profile[index + 1]);
   }
   for (const entry of profile) {
     drawBandAnchorGlow(ctx, band, entry);
   }
+  ctx.restore();
+}
+
+function drawReferenceProfile(ctx, band, bandIndex, profile) {
+  ctx.save();
+  ctx.strokeStyle = colorWithAlpha(bandColors[band], 0.16);
+  ctx.lineWidth = 0.9;
+  ctx.shadowBlur = 0;
+  ctx.beginPath();
+  profile.forEach((entry, index) => {
+    const point = spectralPointBetween(entry.point, entry.point, 0, band, bandIndex, entry.value, entry.value);
+    if (index === 0) ctx.moveTo(point.x, point.y);
+    else {
+      const previous = profile[index - 1];
+      for (let step = 1; step <= 18; step += 1) {
+        const t = step / 18;
+        const next = spectralPointBetween(previous.point, entry.point, t, band, bandIndex, previous.value, entry.value);
+        ctx.lineTo(next.x, next.y);
+      }
+    }
+  });
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -369,8 +393,8 @@ function drawMeasuredSegment(ctx, band, bandIndex, start, end) {
     const value = start.value + (end.value - start.value) * t;
     const inferred = Math.sin(Math.PI * t);
     ctx.strokeStyle = colorWithAlpha(bandColors[band], 0.18 + value * 0.62 - inferred * 0.08);
-    ctx.lineWidth = 1.0 + value * 8.5;
-    ctx.shadowBlur = 8 + value * 24;
+    ctx.lineWidth = 1.0 + value * 7.2;
+    ctx.shadowBlur = 7 + value * 20;
     ctx.beginPath();
     ctx.moveTo(previous.x, previous.y);
     ctx.lineTo(current.x, current.y);
@@ -384,12 +408,11 @@ function spectralPointBetween(start, end, t, band, bandIndex, startValue, endVal
   const y = start.y + (end.y - start.y) * t;
   const localValue = startValue + (endValue - startValue) * t;
   const betweenOnly = Math.sin(Math.PI * t);
-  const direction = bandIndex % 2 === 0 ? -1 : 1;
-  const baseLift = direction * (bandIndex - 2) * 8 * betweenOnly;
+  const baseLift = (bandLaneOffset[band] || 0) * betweenOnly;
   const oscillation = Math.sin(state.phase * bandMotionRate(band) + t * Math.PI * 3 + bandTracePhase[band]) * betweenOnly;
   return {
     x,
-    y: y + baseLift + oscillation * (3 + localValue * 13),
+    y: y + baseLift + oscillation * (4 + localValue * 10),
   };
 }
 
@@ -411,7 +434,7 @@ function normalizedAnchorBandPower(anchor, band) {
   const max = Math.max(...logValues);
   const anchorLog = Math.log10(rawAnchorBandPower(anchor, band) + 1e-18);
   const spatial = max === min ? 0.62 : (anchorLog - min) / (max - min);
-  const globalBand = state.displayNormalized[band] || state.normalized[band] || 0;
+  const globalBand = state.normalized[band] || 0;
   return Math.min(1, 0.11 + globalBand * (0.26 + spatial * 0.63));
 }
 
