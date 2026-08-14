@@ -99,7 +99,3 @@ web/
 3. Browser dashboard with raw traces and alpha activity
 4. Raspberry Pi Zero 2 W deployment notes
 5. Live EEG adapter when hardware is available
-
-## Safety
-
-NeuroMirror is an educational and creative coding project. It is not a medical device, diagnostic tool, treatment tool, or wellness scoring system.
