@@ -35,9 +35,9 @@ body {
   position: relative;
   min-height: 100vh;
   background:
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-  background-size: 48px 48px;
+    radial-gradient(circle at 50% 50%, rgba(255, 228, 92, 0.07), transparent 18rem),
+    radial-gradient(circle at 54% 54%, rgba(77, 246, 255, 0.04), transparent 28rem),
+    #030406;
 }
 
 #field {

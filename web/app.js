@@ -59,6 +59,9 @@ const state = {
   bands: { delta: 0, theta: 0, alpha: 0, beta: 0, gamma: 0 },
   normalized: { delta: 0, theta: 0, alpha: 0, beta: 0, gamma: 0 },
   displayNormalized: { delta: 0, theta: 0, alpha: 0, beta: 0, gamma: 0 },
+  trails: Object.fromEntries(bandNames.map((band) => [band, []])),
+  latestPoints: {},
+  lastFrameTime: null,
   phase: 0,
   paused: false,
 };
@@ -129,6 +132,9 @@ function connectStream() {
 }
 
 function applyFrame(frame) {
+  if (state.lastFrameTime !== null && frame.time_s < state.lastFrameTime) {
+    resetStateTrails();
+  }
   state.frame = frame;
   state.bands = averageBands(frame.features);
   state.normalized = normalizeBands(state.bands);
@@ -136,7 +142,16 @@ function applyFrame(frame) {
     state.displayNormalized = { ...state.normalized };
     state.displayInitialized = true;
   }
+  appendTrajectoryFrame(frame);
   updateHud(frame);
+  state.lastFrameTime = frame.time_s;
+}
+
+function resetStateTrails() {
+  for (const band of bandNames) {
+    state.trails[band] = [];
+  }
+  state.latestPoints = {};
 }
 
 connectStream();
@@ -199,6 +214,10 @@ function numberOrZero(value) {
   return Number.isFinite(value) ? value : 0;
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function signedLabel(value, positive, negative) {
   if (Math.abs(value) < 0.08) return "centered";
   return `${Math.abs(value * 100).toFixed(0)}% ${value > 0 ? positive : negative}`;
@@ -208,30 +227,207 @@ function drawField() {
   const rect = field.getBoundingClientRect();
   const width = rect.width;
   const height = rect.height;
-  const brain = brainBox(width, height);
   const alpha = state.normalized.alpha || 0.2;
-  const theta = state.normalized.theta || 0.2;
   const beta = state.normalized.beta || 0.2;
-  const gamma = state.normalized.gamma || 0.2;
   state.phase += 0.012 + beta * 0.018;
 
-  fieldCtx.fillStyle = "rgba(3, 4, 6, 0.2)";
+  fieldCtx.fillStyle = "rgba(3, 4, 6, 0.26)";
   fieldCtx.fillRect(0, 0, width, height);
-  drawBrainMesh(fieldCtx, brain, alpha, theta);
-
-  const glow = fieldCtx.createRadialGradient(brain.cx, brain.cy, 10, brain.cx, brain.cy, brain.rx * 1.18);
-  glow.addColorStop(0, `rgba(255, 228, 92, ${0.1 + alpha * 0.18})`);
-  glow.addColorStop(0.42, `rgba(77, 246, 255, ${0.08 + theta * 0.1})`);
-  glow.addColorStop(1, "rgba(3, 4, 6, 0)");
-  fieldCtx.fillStyle = glow;
-  fieldCtx.beginPath();
-  traceBrainPath(fieldCtx, brain);
-  fieldCtx.fill();
-
-  drawSpectralProfileTraces(fieldCtx, brain);
-  drawProjectionAnchors(fieldCtx, brain);
-  drawRegionLabels(fieldCtx, brain);
+  drawStateSpaceMap(fieldCtx, width, height, alpha);
   fieldCtx.shadowBlur = 0;
+}
+
+function appendTrajectoryFrame(frame) {
+  if (!frame?.features) return;
+  const layout = stateSpaceLayout(field.getBoundingClientRect().width, field.getBoundingClientRect().height);
+  for (const band of bandNames) {
+    const metrics = bandStateMetrics(frame, band);
+    const projected = projectStatePoint(layout, metrics, band);
+    const previous = state.latestPoints[band];
+    const point = previous
+      ? {
+          ...projected,
+          x: lerpNumber(previous.x, projected.x, 0.38),
+          y: lerpNumber(previous.y, projected.y, 0.38),
+        }
+      : projected;
+    point.time = frame.time_s;
+    state.latestPoints[band] = point;
+    state.trails[band].push(point);
+    if (state.trails[band].length > 190) {
+      state.trails[band].shift();
+    }
+  }
+}
+
+function bandStateMetrics(frame, band) {
+  const features = frame.features;
+  const summary = frame.summary || {};
+  const frontal = channelBandMean(features, ["Fp1", "Fp2"], band);
+  const central = channelBandMean(features, ["C3", "C4"], band);
+  const posterior = channelBandMean(features, ["O1", "O2"], band);
+  const total = frontal + central + posterior + 1e-18;
+  const left = channelBandMean(features, ["Fp1", "C3", "O1"], band);
+  const right = channelBandMean(features, ["Fp2", "C4", "O2"], band);
+  const regionalBalance = (left - right) / (left + right + 1e-18);
+  const anteriorPosterior = (posterior - frontal) / total;
+  const centralPull = (central - (frontal + posterior) / 2) / total;
+  const relativePower = state.normalized[band] || 0;
+  const posteriorAlpha = Math.log2(Math.max(0.15, numberOrZero(summary.posterior_alpha_ratio)));
+  const artifact = numberOrZero(summary.artifact_intensity);
+  const spread = numberOrZero(summary.spectral_spread);
+  const wholeFieldLateral = numberOrZero(summary.hemispheric_balance);
+  const wholeFieldPosterior = clamp(posteriorAlpha / 2.2, -1, 1);
+  const wholeFieldSpread = clamp(spread * 2 - 1, -1, 1);
+
+  return {
+    lateral: clamp(wholeFieldLateral * 0.66 + regionalBalance * 0.28, -1, 1),
+    posterior: clamp(wholeFieldPosterior * 0.72 + anteriorPosterior * 0.46, -1, 1),
+    central: clamp(wholeFieldSpread * 0.48 + centralPull * 0.36, -1, 1),
+    relativePower,
+    artifact: clamp(artifact, 0, 1),
+    spread: clamp(spread, 0, 1),
+  };
+}
+
+function channelBandMean(features, channels, band) {
+  return channels.reduce((sum, channel) => sum + (features[channel]?.[band] || 0), 0) / channels.length;
+}
+
+function stateSpaceLayout(width, height) {
+  return {
+    cx: width * 0.47,
+    cy: height * 0.52,
+    rx: Math.min(width * 0.2, height * 0.3),
+    ry: Math.min(width * 0.13, height * 0.22),
+  };
+}
+
+function projectStatePoint(layout, metrics, band) {
+  const bandOffset = { delta: -0.08, theta: -0.04, alpha: 0.01, beta: 0.04, gamma: 0.08 }[band] || 0;
+  const angle = -0.72;
+  const xAxis = metrics.lateral * layout.rx;
+  const yAxis = -metrics.posterior * layout.ry;
+  const zAxis = metrics.central * layout.ry * 0.32;
+  const orbit = bandOffset * layout.ry * (0.6 + metrics.relativePower * 0.6);
+  const artifactJitter = metrics.artifact * layout.ry * 0.07;
+  const jitter = Math.sin(state.phase * 7 + bandTracePhase[band]) * artifactJitter;
+
+  return {
+    x: layout.cx + xAxis * Math.cos(angle) - yAxis * Math.sin(angle) + orbit + jitter,
+    y: layout.cy + xAxis * Math.sin(angle) + yAxis * Math.cos(angle) - zAxis + orbit * 0.32 - jitter * 0.45,
+    power: metrics.relativePower,
+    artifact: metrics.artifact,
+    spread: metrics.spread,
+  };
+}
+
+function drawStateSpaceMap(ctx, width, height, alphaPower) {
+  const layout = stateSpaceLayout(width, height);
+  drawStateSpaceGlow(ctx, layout, alphaPower);
+  drawStateSpaceAxes(ctx, layout);
+  drawStateTrails(ctx);
+  drawCurrentStateMarker(ctx);
+}
+
+function drawStateSpaceGlow(ctx, layout, alphaPower) {
+  const dominant = state.frame?.summary?.dominant_rhythm || "alpha";
+  const glow = ctx.createRadialGradient(layout.cx, layout.cy, 8, layout.cx, layout.cy, layout.rx * 1.18);
+  glow.addColorStop(0, colorWithAlpha(bandColors[dominant] || bandColors.alpha, 0.08 + alphaPower * 0.06));
+  glow.addColorStop(0.38, "rgba(255, 228, 92, 0.028)");
+  glow.addColorStop(1, "rgba(3, 4, 6, 0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.ellipse(layout.cx, layout.cy, layout.rx * 0.88, layout.ry * 0.98, -0.72, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawStateSpaceAxes(ctx, layout) {
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(244,247,244,0.055)";
+  ctx.lineWidth = 1;
+  const axes = [
+    { dx: layout.rx * 1.1, dy: -layout.ry * 0.96, a: "left alpha", b: "right alpha" },
+    { dx: layout.rx * 1.15, dy: layout.ry * 0.52, a: "frontal", b: "posterior alpha" },
+    { dx: 0, dy: -layout.ry * 0.9, a: "low spread", b: "high spread" },
+  ];
+  for (const axis of axes) {
+    ctx.beginPath();
+    ctx.moveTo(layout.cx - axis.dx, layout.cy - axis.dy);
+    ctx.lineTo(layout.cx + axis.dx, layout.cy + axis.dy);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawStateTrails(ctx) {
+  for (const band of bandNames) {
+    const trail = state.trails[band];
+    if (trail.length < 2) continue;
+    drawBandTrail(ctx, band, trail);
+  }
+}
+
+function drawBandTrail(ctx, band, trail) {
+  const color = bandColors[band];
+  const latest = trail[trail.length - 1];
+  const dominance = latest.power || 0;
+  if (dominance < 0.05) return;
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.shadowColor = color;
+
+  for (let index = 1; index < trail.length; index += 1) {
+    const previous = trail[index - 1];
+    const current = trail[index];
+    const age = index / trail.length;
+    const localPower = (previous.power + current.power) / 2;
+    const artifact = (previous.artifact + current.artifact) / 2;
+    const alpha = Math.max(0, Math.pow(age, 2.2) * (0.16 + localPower * 0.7));
+    ctx.strokeStyle = colorWithAlpha(color, alpha);
+    ctx.lineWidth = 0.7 + localPower * 4.3 + artifact * 2.1;
+    ctx.shadowBlur = 2 + localPower * 15;
+    ctx.beginPath();
+    ctx.moveTo(previous.x, previous.y);
+    ctx.lineTo(current.x, current.y);
+    ctx.stroke();
+  }
+
+  for (let index = Math.max(0, trail.length - 88); index < trail.length; index += 13) {
+    const point = trail[index];
+    const age = index / trail.length;
+    ctx.fillStyle = colorWithAlpha("#f4f7f4", 0.18 + age * 0.48);
+    ctx.shadowBlur = 4 + point.power * 12;
+    ctx.shadowColor = color;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 1.1 + point.power * 2.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = colorWithAlpha(color, 0.32 + dominance * 0.52);
+  ctx.shadowBlur = 10 + dominance * 22;
+  ctx.beginPath();
+  ctx.arc(latest.x, latest.y, 2 + dominance * 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawCurrentStateMarker(ctx) {
+  if (!state.frame) return;
+  const dominant = state.frame.summary?.dominant_rhythm || "alpha";
+  const point = state.latestPoints[dominant];
+  if (!point) return;
+  ctx.save();
+  ctx.fillStyle = "rgba(244,247,244,0.88)";
+  ctx.shadowBlur = 14;
+  ctx.shadowColor = bandColors[dominant] || "#f4f7f4";
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, 2.4 + (point.power || 0) * 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function brainBox(width, height) {
