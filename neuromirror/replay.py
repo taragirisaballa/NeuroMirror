@@ -26,7 +26,7 @@ def replay_frames(
     config: ReplayConfig,
 ) -> Iterator[dict[str, object]]:
     frames: list[dict[str, object]] = []
-    for end in range(config.window_samples, data.shape[1] + 1, config.step_samples):
+    for frame_id, end in enumerate(range(config.window_samples, data.shape[1] + 1, config.step_samples)):
         start = end - config.window_samples
         window = data[:, start:end]
         features = bandpower_by_channel(window, config.sample_rate_hz, config.channels)
@@ -45,6 +45,7 @@ def replay_frames(
         frames.append(
             {
                 "time_s": round(float(times[end - 1]), 3),
+                "frame_id": frame_id,
                 "state": labels[end - 1],
                 "features": features,
                 "raw_preview": _raw_preview(window, config.channels),

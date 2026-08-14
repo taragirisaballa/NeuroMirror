@@ -262,6 +262,34 @@ h2 {
   text-transform: capitalize;
 }
 
+.sync-audit {
+  font-variant-numeric: tabular-nums;
+}
+
+.sync-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.sync-grid div {
+  min-height: 54px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.sync-grid strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
 .compact {
   align-items: stretch;
 }

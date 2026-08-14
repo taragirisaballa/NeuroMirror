@@ -17,6 +17,13 @@ const artifactIntensityEl = document.querySelector("#artifact-intensity");
 const spreadEl = document.querySelector("#spread");
 const balanceEl = document.querySelector("#balance");
 const asymmetryEl = document.querySelector("#asymmetry");
+const syncStatusEl = document.querySelector("#sync-status");
+const syncFrameEl = document.querySelector("#sync-frame");
+const syncTimeEl = document.querySelector("#sync-time");
+const syncModulesEl = document.querySelector("#sync-modules");
+const syncO1AlphaEl = document.querySelector("#sync-o1-alpha");
+const syncO2AlphaEl = document.querySelector("#sync-o2-alpha");
+const syncAlphaNormEl = document.querySelector("#sync-alpha-norm");
 
 const bandColors = {
   delta: "#4df6ff",
@@ -66,6 +73,13 @@ const state = {
   pendingFrames: [],
   drainingQueue: false,
   queueTimer: null,
+  renderedFrames: {
+    field: null,
+    inset: null,
+    bars: null,
+    raw: null,
+    metrics: null,
+  },
   phase: 0,
   paused: false,
 };
@@ -223,6 +237,7 @@ function normalizeBands(bands) {
 }
 
 function updateHud(frame) {
+  markRendered("metrics", frame);
   stateEl.textContent = frame.state.replace("_", " ");
   timeEl.textContent = `${frame.time_s.toFixed(3)}s`;
   artifactEl.textContent = frame.summary.blink_like_artifact ? "blink-like artifact · µV²" : "signal clean · µV²";
@@ -239,6 +254,7 @@ function updateHud(frame) {
 
 function updateSmoothBands() {
   if (!state.frame) return;
+  markRendered("bars", state.frame);
   const smoothing = 0.34;
   for (const band of bandNames) {
     state.displayNormalized[band] = lerpNumber(state.displayNormalized[band] || 0, state.normalized[band] || 0, smoothing);
@@ -271,12 +287,47 @@ function formatBandPowerUv2(value) {
   return uv2.toFixed(2);
 }
 
+function formatFrameId(frame) {
+  if (!frame) return "--";
+  return Number.isFinite(frame.frame_id) ? `#${frame.frame_id}` : "--";
+}
+
+function markRendered(module, frame) {
+  if (!frame) return;
+  state.renderedFrames[module] = frame.frame_id;
+  updateSyncAudit();
+}
+
+function updateSyncAudit() {
+  if (!state.frame) return;
+  const currentFrameId = state.frame.frame_id;
+  const frameValues = Object.values(state.renderedFrames);
+  const renderedCount = frameValues.filter((value) => value !== null && value !== undefined).length;
+  const allSynced = renderedCount === frameValues.length && frameValues.every((value) => value === currentFrameId);
+  const rawO1Alpha = state.frame.features?.O1?.alpha || 0;
+  const rawO2Alpha = state.frame.features?.O2?.alpha || 0;
+  const normalizedO1Alpha = state.frame.normalized_features?.O1?.alpha ?? 0;
+  const normalizedO2Alpha = state.frame.normalized_features?.O2?.alpha ?? 0;
+
+  syncStatusEl.textContent = allSynced ? "single frame" : "rendering";
+  syncStatusEl.style.color = allSynced ? "var(--green)" : "var(--yellow)";
+  syncFrameEl.textContent = formatFrameId(state.frame);
+  syncTimeEl.textContent = `${state.frame.time_s.toFixed(3)}s`;
+  syncModulesEl.textContent = Object.entries(state.renderedFrames)
+    .map(([module, frameId]) => `${module}:${frameId ?? "--"}`)
+    .join(" ");
+  syncO1AlphaEl.textContent = `${formatBandPowerUv2(rawO1Alpha)} µV²`;
+  syncO2AlphaEl.textContent = `${formatBandPowerUv2(rawO2Alpha)} µV²`;
+  syncAlphaNormEl.textContent = `${normalizedO1Alpha.toFixed(2)} / ${normalizedO2Alpha.toFixed(2)}`;
+}
+
 function signedLabel(value, positive, negative) {
   if (Math.abs(value) < 0.08) return "centered";
   return `${Math.abs(value * 100).toFixed(0)}% ${value > 0 ? positive : negative}`;
 }
 
 function drawField() {
+  if (state.frame) markRendered("field", state.frame);
   const rect = field.getBoundingClientRect();
   const width = rect.width;
   const height = rect.height;
@@ -806,6 +857,7 @@ function dominantAnchorBand(anchor) {
 }
 
 function drawTraces() {
+  if (state.frame) markRendered("raw", state.frame);
   const rect = traces.getBoundingClientRect();
   const width = rect.width;
   const height = rect.height;
@@ -835,6 +887,7 @@ function drawTraces() {
 }
 
 function drawHeadmap() {
+  if (state.frame) markRendered("inset", state.frame);
   const rect = headmap.getBoundingClientRect();
   const width = rect.width;
   const height = rect.height;

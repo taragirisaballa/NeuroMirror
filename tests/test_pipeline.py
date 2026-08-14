@@ -23,6 +23,8 @@ def test_synthetic_replay_emits_alpha_summary() -> None:
     assert "normalized_features" in frames[0]
     assert "normalized_bands" in frames[0]
     assert frames[0]["scaling"]["display_band_power_unit"] == "uV^2"
+    assert frames[0]["frame_id"] == 0
+    assert frames[1]["frame_id"] == 1
     assert "O1" in frames[0]["raw_preview"]
     assert frames[0]["state"] == "eyes_open"
     assert frames[-1]["state"] == "eyes_closed"
