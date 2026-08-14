@@ -62,6 +62,7 @@ const state = {
   trails: Object.fromEntries(bandNames.map((band) => [band, []])),
   latestPoints: {},
   lastFrameTime: null,
+  resumeAfterTime: null,
   phase: 0,
   paused: false,
 };
@@ -111,7 +112,8 @@ pauseButton.addEventListener("click", () => {
     closeStream();
     return;
   }
-  connectStream(state.lastFrameTime);
+  state.resumeAfterTime = state.lastFrameTime;
+  connectStream(state.resumeAfterTime);
 });
 
 function closeStream() {
@@ -134,6 +136,10 @@ function connectStream(startAfter = null) {
   stream.onmessage = (event) => {
     const frame = JSON.parse(event.data);
     if (state.paused) return;
+    if (shouldDropResumeFrame(frame)) {
+      return;
+    }
+    state.resumeAfterTime = null;
     applyFrame(frame);
   };
   stream.onerror = () => {
@@ -141,6 +147,10 @@ function connectStream(startAfter = null) {
     artifactEl.textContent = "real EEG not found";
     artifactEl.style.color = "var(--yellow)";
   };
+}
+
+function shouldDropResumeFrame(frame) {
+  return Number.isFinite(state.resumeAfterTime) && frame.time_s <= state.resumeAfterTime;
 }
 
 function applyFrame(frame) {
