@@ -51,15 +51,26 @@ const bandRegionBias = {
   gamma: "posterior",
 };
 
-const particles = Array.from({ length: 72 }, (_, index) => ({
-  angle: (Math.PI * 2 * index) / 72,
-  radius: 0.12 + (index % 9) * 0.014,
-  trail: [],
-  speed: 0.004 + (index % 11) * 0.0008,
-  band: ["delta", "theta", "alpha", "beta", "gamma"][index % 5],
-  channel: ["Fp1", "Fp2", "C3", "C4", "O1", "O2"][index % 6],
-  region: ["frontal", "central", "temporal", "posterior", "occipital"][index % 5],
-}));
+const projectionAnchors = [
+  { label: "Fp1/Fp2", channels: ["Fp1", "Fp2"], region: "frontal" },
+  { label: "C3/C4", channels: ["C3", "C4"], region: "central" },
+  { label: "O1/O2", channels: ["O1", "O2"], region: "occipital" },
+];
+
+const particleChannels = ["Fp1", "Fp2", "C3", "C4", "O1", "O2"];
+const particleBands = ["delta", "theta", "alpha", "beta", "gamma"];
+const particles = Array.from({ length: 44 }, (_, index) => {
+  const channel = particleChannels[index % particleChannels.length];
+  return {
+    angle: (Math.PI * 2 * index) / 44,
+    radius: 0.1 + (index % 7) * 0.014,
+    trail: [],
+    speed: 0.0032 + (index % 9) * 0.00075,
+    band: particleBands[index % particleBands.length],
+    channel,
+    region: channelRegions[channel],
+  };
+});
 
 const state = {
   frame: null,
@@ -243,6 +254,8 @@ function drawField() {
   for (const particle of particles) {
     const drive = state.normalized[particle.band] || 0.18;
     const channelDrive = channelIntensity(particle.channel);
+    const visibility = Math.max(0, Math.min(1, drive * 0.7 + channelDrive * 0.3));
+    if (visibility < 0.16) continue;
     const regionName = channelRegions[particle.channel] || bandRegionBias[particle.band] || particle.region;
     const region = brainRegions[regionName];
     const target = regionPoint(brain, region, particle.angle, particle.radius, drive, channelDrive);
@@ -254,9 +267,9 @@ function drawField() {
     particle.trail.push({ x, y });
     if (particle.trail.length > 54) particle.trail.shift();
 
-    fieldCtx.strokeStyle = bandColors[particle.band];
-    fieldCtx.lineWidth = 0.9 + drive * 2.1 + channelDrive * 0.9;
-    fieldCtx.shadowBlur = 20 + drive * 28;
+    fieldCtx.strokeStyle = colorWithAlpha(bandColors[particle.band], 0.32 + visibility * 0.55);
+    fieldCtx.lineWidth = 0.8 + drive * 1.8 + channelDrive * 0.7;
+    fieldCtx.shadowBlur = 13 + visibility * 24;
     fieldCtx.shadowColor = bandColors[particle.band];
     fieldCtx.beginPath();
     particle.trail.forEach((point, index) => {
@@ -264,14 +277,10 @@ function drawField() {
       else fieldCtx.lineTo(point.x, point.y);
     });
     fieldCtx.stroke();
-
-    fieldCtx.fillStyle = "#f9fff8";
-    fieldCtx.beginPath();
-    fieldCtx.arc(x, y, 1.3 + drive * 1.6 + channelDrive * 1.7, 0, Math.PI * 2);
-    fieldCtx.fill();
   }
   fieldCtx.restore();
   drawRegionLabels(fieldCtx, brain);
+  drawProjectionAnchors(fieldCtx, brain);
   fieldCtx.shadowBlur = 0;
 }
 
@@ -308,24 +317,6 @@ function drawBrainMesh(ctx, brain, alpha, theta) {
   ctx.beginPath();
   traceBrainPath(ctx, brain);
   ctx.stroke();
-
-  ctx.beginPath();
-  ctx.save();
-  traceBrainPath(ctx, brain);
-  ctx.clip();
-  for (let i = 0; i < 92; i += 1) {
-    const start = seededBrainPoint(brain, i, 0.78);
-    const end = seededBrainPoint(brain, i * 7 + 11, 0.84);
-    const color = Object.values(bandColors)[i % 5];
-    ctx.strokeStyle = colorWithAlpha(color, 0.13 + theta * 0.06);
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    const control = seededBrainPoint(brain, i * 13 + 5, 0.42);
-    ctx.quadraticCurveTo(control.x, control.y, end.x, end.y);
-    ctx.stroke();
-  }
-  ctx.restore();
 
   drawBrainstem(ctx, brain);
 
@@ -375,15 +366,6 @@ function drawBrainstem(ctx, brain) {
   ctx.beginPath();
   ctx.ellipse(x + rx * 0.32, y + ry * 0.68, rx * 0.24, ry * 0.18, -0.08, 0, Math.PI * 2);
   ctx.stroke();
-}
-
-function seededBrainPoint(brain, seed, scale) {
-  const angle = (seed * 2.399963229728653) % (Math.PI * 2);
-  const radius = Math.sqrt(((seed * 9301 + 49297) % 233280) / 233280) * scale;
-  return {
-    x: brain.cx + Math.cos(angle) * brain.rx * radius,
-    y: brain.cy + Math.sin(angle) * brain.ry * radius * (0.82 + 0.18 * Math.cos(angle)),
-  };
 }
 
 function regionPoint(brain, region, angle, radius, drive, channelDrive) {
@@ -440,6 +422,29 @@ function drawRegionLabels(ctx, brain) {
     const x = brain.cx + (region.x - 0.5) * brain.rx * 2;
     const y = brain.cy + (region.y - 0.5) * brain.ry * 2 - brain.ry * region.ry * 1.5;
     ctx.fillText(label, x, y);
+  }
+  ctx.restore();
+}
+
+function drawProjectionAnchors(ctx, brain) {
+  ctx.save();
+  ctx.font = "700 10px ui-sans-serif, system-ui";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  for (const anchor of projectionAnchors) {
+    const region = brainRegions[anchor.region];
+    const x = brain.cx + (region.x - 0.5) * brain.rx * 2;
+    const y = brain.cy + (region.y - 0.5) * brain.ry * 2;
+    const strength = anchor.channels.reduce((sum, channel) => sum + channelIntensity(channel), 0) / anchor.channels.length;
+    ctx.shadowBlur = 10 + strength * 18;
+    ctx.shadowColor = "rgba(244,247,244,0.9)";
+    ctx.fillStyle = "rgba(249,255,248,0.92)";
+    ctx.beginPath();
+    ctx.arc(x, y, 3.2 + strength * 3.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(244,247,244,0.66)";
+    ctx.fillText(anchor.label, x, y - 10);
   }
   ctx.restore();
 }
