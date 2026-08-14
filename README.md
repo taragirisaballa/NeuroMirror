@@ -59,8 +59,10 @@ python -m neuromirror.cli dashboard
 - Blink-like artifact flags
 - Peak non-delta rhythm, signal amplitude, spectral spread, and artifact intensity
 - Hemispheric alpha balance and O1/O2 posterior alpha asymmetry
-- Anatomy-inspired sagittal brain mesh for selected frontal, central, and occipital channels
+- Sagittal EEG projection for selected frontal, central, and occipital scalp channels
 - Region summaries for future visual mapping
+
+NeuroMirror does not claim EEG source localization. The visualizer projects real scalp-channel features onto a sagittal anatomy view so posterior alpha, frontal blink artifacts, central activity, and channel quality remain interpretable without pretending the signal is a direct map of activity moving through brain tissue.
 
 ## Project Shape
 
