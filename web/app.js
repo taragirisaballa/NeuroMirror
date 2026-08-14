@@ -53,6 +53,7 @@ const projectionAnchors = [
 
 const bandTracePhase = { delta: 0.2, theta: 1.1, alpha: 2.0, beta: 2.9, gamma: 3.8 };
 const bandLaneOffset = { delta: -34, theta: -17, alpha: 0, beta: 17, gamma: 34 };
+const streamFrameDelayMs = (0.25 / 1.35) * 1000;
 
 const state = {
   frame: null,
@@ -62,7 +63,9 @@ const state = {
   trails: Object.fromEntries(bandNames.map((band) => [band, []])),
   latestPoints: {},
   lastFrameTime: null,
-  resumeAfterTime: null,
+  pendingFrames: [],
+  drainingQueue: false,
+  queueTimer: null,
   phase: 0,
   paused: false,
 };
@@ -109,11 +112,10 @@ pauseButton.addEventListener("click", () => {
   pauseButton.setAttribute("aria-label", state.paused ? "Play replay" : "Pause replay");
   pauseButton.setAttribute("aria-pressed", String(state.paused));
   if (state.paused) {
-    closeStream();
+    stopQueuedPlayback();
     return;
   }
-  state.resumeAfterTime = state.lastFrameTime;
-  connectStream(state.resumeAfterTime);
+  drainQueuedFrames();
 });
 
 function closeStream() {
@@ -135,11 +137,10 @@ function connectStream(startAfter = null) {
   stream = new EventSource(`/api/stream?${params}`);
   stream.onmessage = (event) => {
     const frame = JSON.parse(event.data);
-    if (state.paused) return;
-    if (shouldDropResumeFrame(frame)) {
+    if (state.paused || state.drainingQueue) {
+      queueFrame(frame);
       return;
     }
-    state.resumeAfterTime = null;
     applyFrame(frame);
   };
   stream.onerror = () => {
@@ -149,8 +150,31 @@ function connectStream(startAfter = null) {
   };
 }
 
-function shouldDropResumeFrame(frame) {
-  return Number.isFinite(state.resumeAfterTime) && frame.time_s <= state.resumeAfterTime;
+function queueFrame(frame) {
+  state.pendingFrames.push(frame);
+  if (state.pendingFrames.length > 900) {
+    state.pendingFrames.shift();
+  }
+}
+
+function stopQueuedPlayback() {
+  if (state.queueTimer) {
+    window.clearTimeout(state.queueTimer);
+    state.queueTimer = null;
+  }
+  state.drainingQueue = false;
+}
+
+function drainQueuedFrames() {
+  stopQueuedPlayback();
+  if (state.paused || state.pendingFrames.length === 0) return;
+
+  state.drainingQueue = true;
+  applyFrame(state.pendingFrames.shift());
+  state.queueTimer = window.setTimeout(() => {
+    state.queueTimer = null;
+    drainQueuedFrames();
+  }, streamFrameDelayMs);
 }
 
 function applyFrame(frame) {
