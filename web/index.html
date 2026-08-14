@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NeuroMirror</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="stage" aria-label="NeuroMirror live visualization">
+        <canvas id="field"></canvas>
+        <div class="brand">
+          <p class="eyebrow">NeuroMirror</p>
+          <h1>Brainwave Observatory</h1>
+        </div>
+        <div class="state-panel">
+          <span class="label">Replay State</span>
+          <strong id="state">connecting</strong>
+          <span id="time">0.000s</span>
+        </div>
+      </section>
+
+      <aside class="hud" aria-label="EEG feature dashboard">
+        <section class="module">
+          <div class="module-heading">
+            <h2>Brain Rhythms</h2>
+            <span id="artifact">stream warming</span>
+          </div>
+          <div id="bands" class="bands"></div>
+        </section>
+
+        <section class="module">
+          <div class="module-heading">
+            <h2>Raw Signal</h2>
+            <span>microvolts</span>
+          </div>
+          <canvas id="traces"></canvas>
+        </section>
+
+        <section class="module compact">
+          <div>
+            <span class="label">Posterior Alpha</span>
+            <strong id="alpha-ratio">0.00x</strong>
+          </div>
+          <div>
+            <span class="label">Channel Quality</span>
+            <strong id="quality">waiting</strong>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

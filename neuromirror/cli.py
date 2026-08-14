@@ -18,6 +18,10 @@ def build_parser() -> argparse.ArgumentParser:
     replay.add_argument("--speed", type=float, default=1.0)
     replay.add_argument("--realtime", action="store_true")
     replay.add_argument("--seed", type=int, default=7)
+
+    dashboard = subparsers.add_parser("dashboard", help="Run the local NeuroMirror visual dashboard.")
+    dashboard.add_argument("--host", default="127.0.0.1")
+    dashboard.add_argument("--port", type=int, default=8765)
     return parser
 
 
@@ -30,3 +34,12 @@ def main() -> None:
         filtered = bandpass(data, sample_rate_hz=config.sample_rate_hz)
         frames = replay_frames(filtered, times, labels, config)
         print_replay(frames, config, realtime=args.realtime)
+
+    if args.command == "dashboard":
+        from neuromirror.server import run_dashboard
+
+        run_dashboard(host=args.host, port=args.port)
+
+
+if __name__ == "__main__":
+    main()

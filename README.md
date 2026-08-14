@@ -31,6 +31,14 @@ neuromirror replay --source synthetic --seconds 12
 
 You should see newline-delimited JSON frames with timestamped EEG features.
 
+To launch the first visual dashboard:
+
+```bash
+neuromirror dashboard
+```
+
+Then open `http://127.0.0.1:8765`.
+
 ## What It Tracks
 
 - Delta, theta, alpha, beta, and gamma bandpower
@@ -46,6 +54,7 @@ neuromirror/
   cli.py                 command-line entrypoint
   config.py              experiment and stream settings
   replay.py              live-like replay loop
+  server.py              local dashboard server
   synthetic.py           synthetic EEG generator for demos/tests
   processing/
     bandpower.py         frequency-band feature extraction
@@ -58,6 +67,10 @@ experiments/
   eyes-open-closed.yaml  first replay experiment
 tests/
   test_pipeline.py
+web/
+  index.html             browser dashboard shell
+  app.js                 animated EEG visualizer
+  styles.css             visual system
 ```
 
 ## Roadmap

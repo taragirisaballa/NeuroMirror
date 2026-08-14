@@ -12,5 +12,6 @@ def test_synthetic_replay_emits_alpha_summary() -> None:
 
     assert frames
     assert "posterior_alpha_ratio" in frames[0]["summary"]
+    assert "O1" in frames[0]["raw_preview"]
     assert frames[0]["state"] == "eyes_open"
     assert frames[-1]["state"] == "eyes_closed"
