@@ -52,26 +52,28 @@ const bandRegionBias = {
 };
 
 const signalRoutes = [
-  { name: "left anterior-posterior", channels: ["Fp1", "C3", "O1"] },
-  { name: "right anterior-posterior", channels: ["Fp2", "C4", "O2"] },
-  { name: "frontal symmetry", channels: ["Fp1", "Fp2"] },
-  { name: "central symmetry", channels: ["C3", "C4"] },
-  { name: "posterior alpha synchrony", channels: ["O1", "O2"] },
-  { name: "left global field", channels: ["Fp1", "C4", "O1"] },
-  { name: "right global field", channels: ["Fp2", "C3", "O2"] },
+  { name: "left anterior-posterior", channels: ["Fp1", "C3", "O1"], control: { x: 0.5, y: 0.25 }, bands: ["theta", "alpha", "beta"] },
+  { name: "right anterior-posterior", channels: ["Fp2", "C4", "O2"], control: { x: 0.5, y: 0.66 }, bands: ["theta", "alpha", "beta"] },
+  { name: "posterior alpha synchrony", channels: ["O1", "O2"], control: { x: 0.9, y: 0.48 }, bands: ["alpha"] },
+  { name: "frontal blink arc", channels: ["Fp1", "Fp2"], control: { x: 0.16, y: 0.46 }, bands: ["delta", "gamma"] },
+  { name: "central balance arc", channels: ["C3", "C4"], control: { x: 0.6, y: 0.47 }, bands: ["beta"] },
+  { name: "global state arc", channels: ["Fp1", "C4", "O2"], control: { x: 0.58, y: 0.43 }, bands: ["alpha", "theta"] },
 ];
 
-const particles = Array.from({ length: 42 }, (_, index) => ({
-  angle: (Math.PI * 2 * index) / 72,
-  radius: 0.12 + (index % 9) * 0.014,
-  progress: (index % 17) / 17,
-  trail: [],
-  speed: 0.004 + (index % 11) * 0.0008,
-  band: ["delta", "theta", "alpha", "beta", "gamma"][index % 5],
-  channel: ["Fp1", "Fp2", "C3", "C4", "O1", "O2"][index % 6],
-  region: ["frontal", "central", "temporal", "posterior", "occipital"][index % 5],
-  route: signalRoutes[index % signalRoutes.length],
-}));
+const particles = Array.from({ length: 26 }, (_, index) => {
+  const route = signalRoutes[index % signalRoutes.length];
+  return {
+    angle: (Math.PI * 2 * index) / 72,
+    radius: 0.12 + (index % 9) * 0.014,
+    progress: (index % 13) / 13,
+    trail: [],
+    speed: 0.0032 + (index % 7) * 0.00055,
+    band: route.bands[Math.floor(index / signalRoutes.length) % route.bands.length],
+    channel: route.channels[index % route.channels.length],
+    region: ["frontal", "central", "temporal", "posterior", "occipital"][index % 5],
+    route,
+  };
+});
 
 const state = {
   frame: null,
@@ -238,17 +240,17 @@ function drawField() {
   for (const particle of particles) {
     const drive = routeBandStrength(particle.route, particle.band);
     const channelDrive = routeAmplitude(particle.route);
-    particle.progress = (particle.progress + particle.speed * (0.45 + bandSpeed(particle.band) * 0.1) + drive * 0.008) % 1;
+    particle.progress = (particle.progress + particle.speed * (0.34 + bandSpeed(particle.band) * 0.08) + drive * 0.005) % 1;
     particle.angle += particle.speed + drive * 0.01;
     const point = routePoint(brain, particle.route, particle.progress, particle.angle, drive, channelDrive);
     const x = point.x;
     const y = point.y;
     particle.trail.push({ x, y });
-    if (particle.trail.length > Math.round(18 + drive * 24)) particle.trail.shift();
+    if (particle.trail.length > Math.round(14 + drive * 22)) particle.trail.shift();
 
     fieldCtx.strokeStyle = bandColors[particle.band];
-    fieldCtx.lineWidth = 0.7 + drive * 2.0 + channelDrive * 0.5;
-    fieldCtx.shadowBlur = 12 + drive * 22;
+    fieldCtx.lineWidth = 0.7 + drive * 1.8 + channelDrive * 0.45;
+    fieldCtx.shadowBlur = 10 + drive * 20;
     fieldCtx.shadowColor = bandColors[particle.band];
     fieldCtx.beginPath();
     particle.trail.forEach((point, index) => {
@@ -387,26 +389,40 @@ function flowPointBetweenRegions(brain, particle, drive, channelDrive) {
 }
 
 function routePoint(brain, route, progress, angle, drive, channelDrive) {
-  const points = route.channels.map((channel) => electrodePoint(brain, electrodeLayout[channel]));
-  const segmentCount = points.length - 1;
-  const scaled = progress * segmentCount;
-  const index = Math.min(segmentCount - 1, Math.floor(scaled));
-  const local = scaled - index;
-  const start = points[index];
-  const end = points[index + 1];
-  const eased = local * local * (3 - 2 * local);
-  const x = start.x + (end.x - start.x) * eased;
-  const y = start.y + (end.y - start.y) * eased;
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const length = Math.hypot(dx, dy) || 1;
-  const normalX = -dy / length;
-  const normalY = dx / length;
+  const t = progress < 0.5 ? progress * 2 : (1 - progress) * 2;
+  const start = electrodePoint(brain, electrodeLayout[route.channels[0]]);
+  const end = electrodePoint(brain, electrodeLayout[route.channels[route.channels.length - 1]]);
+  const control = routeControlPoint(brain, route);
+  const eased = t * t * (3 - 2 * t);
+  const base = quadraticPoint(start, control, end, eased);
+  const normal = quadraticNormal(start, control, end, eased);
   const wobble = Math.sin(angle * 2.2 + state.phase * bandSpeed(routeBandForColor(route))) * brain.ry * (0.018 + drive * 0.018 + channelDrive * 0.012);
   return {
-    x: x + normalX * wobble,
-    y: y + normalY * wobble,
+    x: base.x + normal.x * wobble,
+    y: base.y + normal.y * wobble,
   };
+}
+
+function routeControlPoint(brain, route) {
+  return {
+    x: brain.cx + (route.control.x - 0.5) * brain.rx * 2,
+    y: brain.cy + (route.control.y - 0.5) * brain.ry * 2,
+  };
+}
+
+function quadraticPoint(start, control, end, t) {
+  const u = 1 - t;
+  return {
+    x: u * u * start.x + 2 * u * t * control.x + t * t * end.x,
+    y: u * u * start.y + 2 * u * t * control.y + t * t * end.y,
+  };
+}
+
+function quadraticNormal(start, control, end, t) {
+  const dx = 2 * (1 - t) * (control.x - start.x) + 2 * t * (end.x - control.x);
+  const dy = 2 * (1 - t) * (control.y - start.y) + 2 * t * (end.y - control.y);
+  const length = Math.hypot(dx, dy) || 1;
+  return { x: -dy / length, y: dx / length };
 }
 
 function routeBandForColor(route) {
