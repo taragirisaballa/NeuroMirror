@@ -10,7 +10,6 @@ const artifactEl = document.querySelector("#artifact");
 const alphaRatioEl = document.querySelector("#alpha-ratio");
 const qualityEl = document.querySelector("#quality");
 const bandsEl = document.querySelector("#bands");
-const sourceButtons = [...document.querySelectorAll("[data-source]")];
 const pauseButton = document.querySelector("#pause");
 const dominantEl = document.querySelector("#dominant");
 const amplitudeEl = document.querySelector("#amplitude");
@@ -105,19 +104,10 @@ window.addEventListener("resize", resize);
 resize();
 
 let stream = null;
-let activeSource = "synthetic";
-
-sourceButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    activeSource = button.dataset.source;
-    sourceButtons.forEach((item) => item.classList.toggle("active", item === button));
-    connectStream();
-  });
-});
-
 pauseButton.addEventListener("click", () => {
   state.paused = !state.paused;
-  pauseButton.textContent = state.paused ? "Play" : "Pause";
+  pauseButton.classList.toggle("is-paused", state.paused);
+  pauseButton.setAttribute("aria-label", state.paused ? "Play replay" : "Pause replay");
   pauseButton.setAttribute("aria-pressed", String(state.paused));
   if (!state.paused && state.heldFrame) {
     applyFrame(state.heldFrame);
@@ -128,8 +118,8 @@ pauseButton.addEventListener("click", () => {
 function connectStream() {
   if (stream) stream.close();
   stateEl.textContent = "connecting";
-  artifactEl.textContent = activeSource === "openneuro" ? "loading real EEG" : "stream warming";
-  const params = new URLSearchParams({ source: activeSource, seconds: "24", speed: "1.35" });
+  artifactEl.textContent = "loading real EEG";
+  const params = new URLSearchParams({ source: "openneuro", seconds: "24", speed: "1.35" });
   stream = new EventSource(`/api/stream?${params}`);
   stream.onmessage = (event) => {
     const frame = JSON.parse(event.data);
@@ -140,7 +130,7 @@ function connectStream() {
     applyFrame(frame);
   };
   stream.onerror = () => {
-    artifactEl.textContent = activeSource === "openneuro" ? "real EEG not found" : "stream reconnecting";
+    artifactEl.textContent = "real EEG not found";
     artifactEl.style.color = "var(--yellow)";
   };
 }
@@ -226,9 +216,13 @@ function drawField() {
   glow.addColorStop(1, "rgba(3, 4, 6, 0)");
   fieldCtx.fillStyle = glow;
   fieldCtx.beginPath();
-  fieldCtx.ellipse(brain.cx, brain.cy, brain.rx * 1.08, brain.ry * 1.08, -0.08, 0, Math.PI * 2);
+  traceBrainPath(fieldCtx, brain);
   fieldCtx.fill();
 
+  fieldCtx.save();
+  fieldCtx.beginPath();
+  traceBrainPath(fieldCtx, brain);
+  fieldCtx.clip();
   for (const particle of particles) {
     const drive = state.normalized[particle.band] || 0.18;
     const channelDrive = channelIntensity(particle.channel);
@@ -259,6 +253,7 @@ function drawField() {
     fieldCtx.arc(x, y, 1.3 + drive * 1.6 + channelDrive * 1.7, 0, Math.PI * 2);
     fieldCtx.fill();
   }
+  fieldCtx.restore();
   drawRegionLabels(fieldCtx, brain);
   fieldCtx.shadowBlur = 0;
 }
@@ -294,15 +289,13 @@ function drawBrainMesh(ctx, brain, alpha, theta) {
   ctx.strokeStyle = `rgba(244, 247, 244, ${0.24 + alpha * 0.1})`;
   ctx.lineWidth = 1.3;
   ctx.beginPath();
-  ctx.ellipse(brain.cx, brain.cy, brain.rx, brain.ry, -0.12, Math.PI * 0.06, Math.PI * 1.9);
+  traceBrainPath(ctx, brain);
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.moveTo(brain.cx - brain.rx * 1.02, brain.cy - brain.ry * 0.08);
-  ctx.lineTo(brain.cx - brain.rx * 1.15, brain.cy);
-  ctx.lineTo(brain.cx - brain.rx * 1.02, brain.cy + brain.ry * 0.08);
-  ctx.stroke();
-
+  ctx.save();
+  traceBrainPath(ctx, brain);
+  ctx.clip();
   for (let i = 0; i < 92; i += 1) {
     const start = seededBrainPoint(brain, i, 0.78);
     const end = seededBrainPoint(brain, i * 7 + 11, 0.84);
@@ -315,6 +308,9 @@ function drawBrainMesh(ctx, brain, alpha, theta) {
     ctx.quadraticCurveTo(control.x, control.y, end.x, end.y);
     ctx.stroke();
   }
+  ctx.restore();
+
+  drawBrainstem(ctx, brain);
 
   ctx.strokeStyle = "rgba(244,247,244,0.15)";
   ctx.lineWidth = 0.9;
@@ -327,6 +323,41 @@ function drawBrainMesh(ctx, brain, alpha, theta) {
   }
 
   ctx.restore();
+}
+
+function traceBrainPath(ctx, brain) {
+  const x = brain.cx;
+  const y = brain.cy;
+  const rx = brain.rx;
+  const ry = brain.ry;
+  ctx.moveTo(x - rx * 0.98, y - ry * 0.1);
+  ctx.bezierCurveTo(x - rx * 1.04, y - ry * 0.48, x - rx * 0.78, y - ry * 0.82, x - rx * 0.34, y - ry * 0.9);
+  ctx.bezierCurveTo(x + rx * 0.02, y - ry * 1.02, x + rx * 0.48, y - ry * 0.86, x + rx * 0.74, y - ry * 0.58);
+  ctx.bezierCurveTo(x + rx * 1.0, y - ry * 0.3, x + rx * 1.03, y + ry * 0.12, x + rx * 0.84, y + ry * 0.35);
+  ctx.bezierCurveTo(x + rx * 0.72, y + ry * 0.52, x + rx * 0.43, y + ry * 0.5, x + rx * 0.28, y + ry * 0.62);
+  ctx.bezierCurveTo(x + rx * 0.02, y + ry * 0.82, x - rx * 0.46, y + ry * 0.72, x - rx * 0.72, y + ry * 0.45);
+  ctx.bezierCurveTo(x - rx * 0.92, y + ry * 0.25, x - rx * 0.98, y + ry * 0.08, x - rx * 0.98, y - ry * 0.1);
+  ctx.closePath();
+}
+
+function drawBrainstem(ctx, brain) {
+  const x = brain.cx;
+  const y = brain.cy;
+  const rx = brain.rx;
+  const ry = brain.ry;
+
+  ctx.strokeStyle = "rgba(244,247,244,0.22)";
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.moveTo(x - rx * 0.12, y + ry * 0.58);
+  ctx.bezierCurveTo(x - rx * 0.1, y + ry * 0.88, x - rx * 0.02, y + ry * 1.05, x + rx * 0.05, y + ry * 1.26);
+  ctx.lineTo(x - rx * 0.08, y + ry * 1.3);
+  ctx.bezierCurveTo(x - rx * 0.16, y + ry * 1.1, x - rx * 0.23, y + ry * 0.88, x - rx * 0.24, y + ry * 0.65);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.ellipse(x + rx * 0.32, y + ry * 0.68, rx * 0.24, ry * 0.18, -0.08, 0, Math.PI * 2);
+  ctx.stroke();
 }
 
 function seededBrainPoint(brain, seed, scale) {
@@ -437,18 +468,14 @@ function drawHeadmap() {
   const cy = height * 0.52;
   const rx = width * 0.34;
   const ry = height * 0.36;
+  const miniBrain = { cx, cy, rx, ry };
 
   headCtx.strokeStyle = "rgba(244,247,244,0.42)";
   headCtx.lineWidth = 1.4;
   headCtx.beginPath();
-  headCtx.ellipse(cx, cy, rx, ry, -0.08, Math.PI * 0.12, Math.PI * 1.88);
+  traceBrainPath(headCtx, miniBrain);
   headCtx.stroke();
-
-  headCtx.beginPath();
-  headCtx.moveTo(cx - rx * 1.02, cy - ry * 0.16);
-  headCtx.lineTo(cx - rx * 1.2, cy - ry * 0.08);
-  headCtx.lineTo(cx - rx * 1.02, cy + ry * 0.02);
-  headCtx.stroke();
+  drawBrainstem(headCtx, miniBrain);
 
   headCtx.fillStyle = "rgba(141,155,159,0.82)";
   headCtx.font = "11px ui-sans-serif, system-ui";

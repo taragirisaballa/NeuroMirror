@@ -45,7 +45,7 @@ class NeuroMirrorHandler(BaseHTTPRequestHandler):
         seconds = _float_query(query, "seconds", 24.0)
         speed = _float_query(query, "speed", 1.0)
         seed = int(_float_query(query, "seed", 7))
-        source = query.get("source", ["synthetic"])[0]
+        source = query.get("source", ["openneuro"])[0]
         config = ReplayConfig(speed=speed)
 
         self.send_response(200)

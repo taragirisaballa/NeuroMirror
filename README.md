@@ -18,7 +18,7 @@ OpenNeuro EEG recording
         -> dashboard / visualization
 ```
 
-The current repo includes a synthetic EEG replay so the pipeline can run before any large public dataset is downloaded.
+The dashboard is designed around real OpenNeuro EEG replay. The repo also keeps a synthetic replay command for development and testing.
 
 ## Quick Start
 
@@ -34,6 +34,8 @@ You should see newline-delimited JSON frames with timestamped EEG features.
 To launch the first visual dashboard:
 
 ```bash
+pip install -e ".[openneuro,dev]"
+python -m neuromirror.cli fetch-openneuro --dataset ds005385 --subject 001
 python -m neuromirror.cli dashboard
 ```
 
@@ -41,7 +43,7 @@ Then open `http://127.0.0.1:8765`.
 
 ## Real EEG Replay
 
-NeuroMirror's default dashboard uses a synthetic EEG-like stream so the visual system works immediately. To replay real EEG, install the optional OpenNeuro dependencies and fetch one subject from `ds005385`:
+NeuroMirror's dashboard replays real EEG from `ds005385` once one subject has been fetched:
 
 ```bash
 pip install -e ".[openneuro,dev]"
@@ -49,17 +51,15 @@ python -m neuromirror.cli fetch-openneuro --dataset ds005385 --subject 001
 python -m neuromirror.cli dashboard
 ```
 
-In the dashboard, switch from `Synthetic Demo` to `Real EEG`.
-
 ## What It Tracks
 
 - Delta, theta, alpha, beta, and gamma bandpower
 - Alpha reactivity during eyes-open / eyes-closed replay
 - Simple channel quality signals
 - Blink-like artifact flags
-- Dominant rhythm, signal amplitude, spectral spread, and artifact intensity
+- Peak non-delta rhythm, signal amplitude, spectral spread, and artifact intensity
 - Hemispheric alpha balance and O1/O2 posterior alpha asymmetry
-- Approximate sagittal scalp map for selected frontal, central, and occipital channels
+- Anatomy-inspired sagittal brain mesh for selected frontal, central, and occipital channels
 - Region summaries for future visual mapping
 
 ## Project Shape

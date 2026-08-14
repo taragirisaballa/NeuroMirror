@@ -5,6 +5,7 @@ import numpy as np
 
 def dominant_rhythm(features: dict[str, dict[str, float]]) -> str:
     totals = _band_totals(features)
+    totals.pop("delta", None)
     if not totals:
         return "unknown"
     return max(totals, key=totals.get)
