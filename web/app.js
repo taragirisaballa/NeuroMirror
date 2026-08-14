@@ -56,9 +56,14 @@ const particles = Array.from({ length: 108 }, (_, index) => {
   const channels = ["Fp1", "Fp2", "C3", "C4", "O1", "O2"];
   const bands = ["delta", "theta", "alpha", "beta", "gamma"];
   return {
+    seed: index,
     angle: (Math.PI * 2 * index) / 108,
     radius: 0.08 + (index % 12) * 0.012,
     trail: [],
+    x: null,
+    y: null,
+    vx: 0,
+    vy: 0,
     speed: 0.006 + (index % 13) * 0.0009,
     band: bands[index % bands.length],
     channel: channels[index % channels.length],
@@ -402,22 +407,34 @@ function drawPhysiologyOverlays(ctx, brain) {
 function drawChannelTrailField(ctx, brain) {
   if (!state.frame?.features) return;
   for (const particle of particles) {
-    const bandPower = bandChannelShare(particle.channel, particle.band);
-    const channelDrive = channelIntensity(particle.channel);
-    const blinkBoost = blinkDriveForParticle(particle);
-    const drive = Math.min(1, bandPower * 0.72 + channelDrive * 0.28 + blinkBoost);
-    particle.angle += particle.speed * (0.7 + bandSpeed(particle.band) * 0.16) + drive * 0.036 + blinkBoost * 0.06;
+    ensureParticlePosition(particle, brain);
+    const local = localBandField(brain, particle);
+    const blinkBoost = blinkFieldStrength();
+    const drive = Math.min(1, local.strength * 0.82 + state.normalized[particle.band] * 0.18 + blinkBoost * 0.28);
+    const speed = 0.9 + bandSpeed(particle.band) * 0.18 + drive * 1.6;
+    const jitter = artifactJitter() * (particle.band === "delta" || particle.band === "gamma" ? 1.25 : 0.65);
 
-    const point = channelParticlePoint(brain, particle, drive, blinkBoost);
+    particle.angle += particle.speed * (0.8 + drive * 2.8);
+    particle.vx = particle.vx * 0.9 + local.vx * speed + Math.cos(particle.angle + state.phase) * jitter;
+    particle.vy = particle.vy * 0.9 + local.vy * speed + Math.sin(particle.angle * 1.3 + state.phase) * jitter;
+    particle.x += particle.vx;
+    particle.y += particle.vy;
+
+    if (!isInsideBrainApprox(brain, particle.x, particle.y)) {
+      wrapParticleToBrain(particle, brain);
+    }
+
+    const point = { x: particle.x, y: particle.y };
     particle.trail.push(point);
-    const maxTrail = Math.round(22 + drive * 46 + blinkBoost * 28);
+    const coherence = pairCoherenceProxy(particle.band);
+    const maxTrail = Math.round(26 + drive * 34 + coherence * 28);
     while (particle.trail.length > maxTrail) particle.trail.shift();
 
     const color = bandColors[particle.band];
     ctx.save();
-    ctx.strokeStyle = colorWithAlpha(color, 0.2 + drive * 0.58);
-    ctx.lineWidth = 0.7 + drive * 2.8 + blinkBoost * 2.2;
-    ctx.shadowBlur = 14 + drive * 34 + blinkBoost * 32;
+    ctx.strokeStyle = colorWithAlpha(color, 0.16 + drive * 0.62);
+    ctx.lineWidth = 0.7 + drive * 2.3 + blinkBoost * 0.8;
+    ctx.shadowBlur = 12 + drive * 34 + coherence * 18;
     ctx.shadowColor = color;
     ctx.setLineDash(particle.band === "beta" || particle.band === "gamma" ? [8, 8] : []);
     ctx.lineDashOffset = -state.phase * (20 + drive * 70);
@@ -431,32 +448,82 @@ function drawChannelTrailField(ctx, brain) {
 
     ctx.fillStyle = "#f9fff8";
     ctx.beginPath();
-    ctx.arc(point.x, point.y, 1.1 + drive * 2.5 + blinkBoost * 2.2, 0, Math.PI * 2);
+    ctx.arc(point.x, point.y, 1.0 + drive * 2.4, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
-  drawElectrodes(ctx, brain);
+  drawConnectivityStreaks(ctx, brain);
 }
 
-function channelParticlePoint(brain, particle, drive, blinkBoost) {
-  const electrode = electrodeLayout[particle.channel];
-  const region = brainRegions[channelRegions[particle.channel]];
-  const center = regionCenter(brain, region);
-  const path = corticalPathForChannel(brain, particle.channel);
-  const pathT = (Math.sin(state.phase * (0.72 + drive) + particle.phase) + 1) / 2;
-  const pathPoint = pointOnCubic(path, pathT);
-  const orbitX = Math.cos(particle.angle * 1.25 + particle.phase) * brain.rx * region.rx * (0.22 + particle.radius + drive * 0.2);
-  const orbitY = Math.sin(particle.angle * 1.55) * brain.ry * region.ry * (0.28 + particle.radius + drive * 0.22);
-  const bandOffset = particle.lane * brain.ry * 0.012;
-  const anchor = electrodePoint(brain, electrode);
-  const anchorBias = particle.channel === "Fp1" || particle.channel === "Fp2" ? 0.22 : 0.12;
-  const x = center.x * 0.45 + pathPoint.x * 0.43 + anchor.x * anchorBias + orbitX;
-  const y = center.y * 0.45 + pathPoint.y * 0.43 + anchor.y * anchorBias + orbitY + bandOffset;
+function ensureParticlePosition(particle, brain) {
+  if (Number.isFinite(particle.x) && Number.isFinite(particle.y)) return;
+  const start = seededBrainPoint(brain, particle.seed, 0.78);
+  particle.x = start.x;
+  particle.y = start.y;
+  particle.vx = Math.cos(particle.angle) * 0.6;
+  particle.vy = Math.sin(particle.angle) * 0.4;
+  particle.trail = [start];
+}
 
-  if (blinkBoost <= 0) return { x, y };
+function localBandField(brain, particle) {
+  const anchors = Object.entries(electrodeLayout).map(([channel, point]) => ({
+    channel,
+    point: electrodePoint(brain, point),
+    strength: channelBandStrength(channel, particle.band),
+  }));
+  const weighted = anchors.reduce(
+    (acc, anchor) => {
+      const dx = anchor.point.x - particle.x;
+      const dy = anchor.point.y - particle.y;
+      const dist = Math.hypot(dx / brain.rx, dy / brain.ry) + 0.16;
+      const weight = anchor.strength / (dist * dist);
+      acc.x += anchor.point.x * weight;
+      acc.y += anchor.point.y * weight;
+      acc.weight += weight;
+      acc.strength = Math.max(acc.strength, anchor.strength);
+      return acc;
+    },
+    { x: 0, y: 0, weight: 0, strength: 0 },
+  );
+
+  const target = weighted.weight > 0 ? { x: weighted.x / weighted.weight, y: weighted.y / weighted.weight } : seededBrainPoint(brain, particle.seed + 19, 0.5);
+  const toTargetX = (target.x - particle.x) / brain.rx;
+  const toTargetY = (target.y - particle.y) / brain.ry;
+  const swirl = Math.sin(state.phase * 1.6 + particle.phase) * 0.7;
+  const globalFlow = state.frame?.state === "eyes_closed" && particle.band === "alpha" ? 0.34 : 0.18;
+  const blink = blinkFieldStrength();
+  const frontal = electrodePoint(brain, electrodeLayout.Fp1);
+  const blinkX = blink * (particle.x - frontal.x) / brain.rx;
+  const blinkY = blink * (particle.y - frontal.y) / brain.ry;
+
   return {
-    x: x * (1 - blinkBoost * 0.38) + (anchor.x - brain.rx * 0.06 + Math.sin(particle.angle) * brain.rx * 0.08) * blinkBoost * 0.38,
-    y: y * (1 - blinkBoost * 0.38) + (anchor.y + Math.cos(particle.angle * 1.3) * brain.ry * 0.22) * blinkBoost * 0.38,
+    vx: toTargetX * 0.42 - toTargetY * 0.16 * swirl + globalFlow * 0.22 + blinkX * 0.7,
+    vy: toTargetY * 0.36 + toTargetX * 0.14 * swirl + Math.sin(state.phase + particle.phase) * 0.12 + blinkY * 0.4,
+    strength: Math.min(1, weighted.strength + blink * 0.24),
+  };
+}
+
+function wrapParticleToBrain(particle, brain) {
+  const start = seededBrainPoint(brain, particle.seed + Math.floor(state.phase * 10), 0.68);
+  particle.x = start.x;
+  particle.y = start.y;
+  particle.vx *= 0.2;
+  particle.vy *= 0.2;
+  particle.trail = [start];
+}
+
+function isInsideBrainApprox(brain, x, y) {
+  const nx = (x - brain.cx) / brain.rx;
+  const ny = (y - brain.cy) / brain.ry;
+  return nx > -1.1 && nx < 1.22 && ny > -0.98 && ny < 0.9 && nx * nx * 0.72 + ny * ny < 1.18;
+}
+
+function seededBrainPoint(brain, seed, scale) {
+  const angle = (seed * 2.399963229728653) % (Math.PI * 2);
+  const radius = Math.sqrt(((seed * 9301 + 49297) % 233280) / 233280) * scale;
+  return {
+    x: brain.cx + Math.cos(angle) * brain.rx * radius,
+    y: brain.cy + Math.sin(angle) * brain.ry * radius * (0.82 + 0.18 * Math.cos(angle)),
   };
 }
 
@@ -467,11 +534,79 @@ function bandChannelShare(channel, band) {
   return Math.min(1, ((bands[band] || 0) / total) * 4.2);
 }
 
+function channelBandStrength(channel, band) {
+  const share = bandChannelShare(channel, band);
+  const absolute = channelIntensity(channel);
+  const posteriorAlpha =
+    band === "alpha" && (channel === "O1" || channel === "O2")
+      ? Math.min(0.42, Math.max(0, numberOrZero(state.frame?.summary?.posterior_alpha_ratio) - 1) * 0.18)
+      : 0;
+  const eyesOpenAlphaSuppression = state.frame?.state === "eyes_open" && band === "alpha" && (channel === "O1" || channel === "O2") ? -0.12 : 0;
+  return Math.max(0.02, Math.min(1, share * 0.7 + absolute * 0.24 + posteriorAlpha + eyesOpenAlphaSuppression));
+}
+
 function blinkDriveForParticle(particle) {
   if (!state.frame?.summary?.blink_like_artifact) return 0;
   if (particle.channel !== "Fp1" && particle.channel !== "Fp2") return 0;
   const artifact = numberOrZero(state.frame.summary.artifact_intensity);
   return Math.min(0.9, artifact * (particle.band === "delta" || particle.band === "gamma" ? 0.9 : 0.45));
+}
+
+function blinkFieldStrength() {
+  if (!state.frame?.summary?.blink_like_artifact) return 0;
+  return Math.min(1, numberOrZero(state.frame.summary.artifact_intensity));
+}
+
+function artifactJitter() {
+  return numberOrZero(state.frame?.summary?.artifact_intensity) * 0.42;
+}
+
+function pairCoherenceProxy(band) {
+  const pairs = [
+    ["Fp1", "Fp2"],
+    ["C3", "C4"],
+    ["O1", "O2"],
+  ];
+  const values = pairs.map(([left, right]) => {
+    const a = channelBandStrength(left, band);
+    const b = channelBandStrength(right, band);
+    return 1 - Math.abs(a - b) / Math.max(a, b, 0.001);
+  });
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function drawConnectivityStreaks(ctx, brain) {
+  const pairs = [
+    ["Fp1", "Fp2"],
+    ["C3", "C4"],
+    ["O1", "O2"],
+    ["Fp1", "C3"],
+    ["Fp2", "C4"],
+    ["C3", "O1"],
+    ["C4", "O2"],
+  ];
+  ctx.save();
+  ctx.lineCap = "round";
+  for (const [left, right] of pairs) {
+    const leftPoint = electrodePoint(brain, electrodeLayout[left]);
+    const rightPoint = electrodePoint(brain, electrodeLayout[right]);
+    for (const band of ["theta", "alpha", "beta"]) {
+      const strength = Math.min(channelBandStrength(left, band), channelBandStrength(right, band));
+      if (strength < 0.16) continue;
+      const color = bandColors[band];
+      ctx.strokeStyle = colorWithAlpha(color, 0.04 + strength * 0.18);
+      ctx.lineWidth = 0.5 + strength * 1.1;
+      ctx.setLineDash([10, 16]);
+      ctx.lineDashOffset = -state.phase * (34 + bandSpeed(band) * 8);
+      ctx.beginPath();
+      ctx.moveTo(leftPoint.x, leftPoint.y);
+      const control = seededBrainPoint(brain, left.charCodeAt(0) + right.charCodeAt(1) + band.length, 0.3 + strength * 0.22);
+      ctx.quadraticCurveTo(control.x, control.y, rightPoint.x, rightPoint.y);
+      ctx.stroke();
+    }
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
 }
 
 function drawChannelSignals(ctx, brain) {
