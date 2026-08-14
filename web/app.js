@@ -67,10 +67,6 @@ const state = {
   bands: { delta: 0, theta: 0, alpha: 0, beta: 0, gamma: 0 },
   normalized: { delta: 0, theta: 0, alpha: 0, beta: 0, gamma: 0 },
   displayNormalized: { delta: 0, theta: 0, alpha: 0, beta: 0, gamma: 0 },
-  targetSummary: {},
-  displaySummary: {},
-  targetRawPreview: null,
-  displayRawPreview: null,
   phase: 0,
   paused: false,
 };
@@ -144,14 +140,11 @@ function applyFrame(frame) {
   state.frame = frame;
   state.bands = averageBands(frame.features);
   state.normalized = normalizeBands(state.bands);
-  state.targetSummary = numericSummary(frame.summary);
-  state.targetRawPreview = frame.raw_preview;
-  if (!Object.keys(state.displaySummary).length) {
-    state.displaySummary = { ...state.targetSummary };
+  if (!state.displayInitialized) {
     state.displayNormalized = { ...state.normalized };
-    state.displayRawPreview = cloneRawPreview(state.targetRawPreview);
+    state.displayInitialized = true;
   }
-  updateFrameLabels(frame);
+  updateHud(frame);
 }
 
 connectStream();
@@ -176,36 +169,27 @@ function normalizeBands(bands) {
   return Object.fromEntries(Object.entries(bands).map(([key, value]) => [key, Math.min(1, value / max)]));
 }
 
-function updateFrameLabels(frame) {
+function updateHud(frame) {
   stateEl.textContent = frame.state.replace("_", " ");
   timeEl.textContent = `${frame.time_s.toFixed(3)}s`;
   artifactEl.textContent = frame.summary.blink_like_artifact ? "blink-like artifact" : "signal clean";
   artifactEl.style.color = frame.summary.blink_like_artifact ? "var(--yellow)" : "var(--green)";
+  alphaRatioEl.textContent = `${frame.summary.posterior_alpha_ratio.toFixed(2)}x`;
   qualityEl.textContent = Object.values(frame.summary.channel_quality).includes("noisy") ? "review" : "ok";
   dominantEl.textContent = frame.summary.dominant_rhythm || "warming";
+  amplitudeEl.textContent = `${numberOrZero(frame.summary.signal_amplitude_uv).toFixed(1)} uV`;
+  artifactIntensityEl.textContent = `${Math.round(numberOrZero(frame.summary.artifact_intensity) * 100)}%`;
+  spreadEl.textContent = `${Math.round(numberOrZero(frame.summary.spectral_spread) * 100)}%`;
+  balanceEl.textContent = signedLabel(numberOrZero(frame.summary.hemispheric_balance), "left", "right");
+  asymmetryEl.textContent = signedLabel(numberOrZero(frame.summary.posterior_alpha_asymmetry), "O1", "O2");
 }
 
-function updateSmoothHud() {
+function updateSmoothBands() {
   if (!state.frame) return;
-  const smoothing = 0.18;
+  const smoothing = 0.34;
   for (const band of Object.keys(bandColors)) {
     state.displayNormalized[band] = lerpNumber(state.displayNormalized[band] || 0, state.normalized[band] || 0, smoothing);
   }
-  for (const key of Object.keys(state.targetSummary)) {
-    state.displaySummary[key] = lerpNumber(
-      numberOrZero(state.displaySummary[key]),
-      numberOrZero(state.targetSummary[key]),
-      smoothing,
-    );
-  }
-  smoothRawPreview(smoothing);
-
-  alphaRatioEl.textContent = `${numberOrZero(state.displaySummary.posterior_alpha_ratio).toFixed(2)}x`;
-  amplitudeEl.textContent = `${numberOrZero(state.displaySummary.signal_amplitude_uv).toFixed(1)} uV`;
-  artifactIntensityEl.textContent = `${Math.round(numberOrZero(state.displaySummary.artifact_intensity) * 100)}%`;
-  spreadEl.textContent = `${Math.round(numberOrZero(state.displaySummary.spectral_spread) * 100)}%`;
-  balanceEl.textContent = signedLabel(numberOrZero(state.displaySummary.hemispheric_balance), "left", "right");
-  asymmetryEl.textContent = signedLabel(numberOrZero(state.displaySummary.posterior_alpha_asymmetry), "O1", "O2");
 
   [...bandsEl.querySelectorAll(".band")].forEach((row) => {
     const band = row.firstElementChild.textContent;
@@ -213,40 +197,6 @@ function updateSmoothHud() {
     row.querySelector(".bar span").style.width = `${Math.round(value * 100)}%`;
     row.querySelector("output").textContent = `${Math.round(value * 100)}%`;
   });
-}
-
-function numericSummary(summary) {
-  return {
-    posterior_alpha_ratio: numberOrZero(summary.posterior_alpha_ratio),
-    signal_amplitude_uv: numberOrZero(summary.signal_amplitude_uv),
-    artifact_intensity: numberOrZero(summary.artifact_intensity),
-    spectral_spread: numberOrZero(summary.spectral_spread),
-    hemispheric_balance: numberOrZero(summary.hemispheric_balance),
-    posterior_alpha_asymmetry: numberOrZero(summary.posterior_alpha_asymmetry),
-  };
-}
-
-function cloneRawPreview(rawPreview) {
-  if (!rawPreview) return null;
-  return Object.fromEntries(Object.entries(rawPreview).map(([channel, samples]) => [channel, [...samples]]));
-}
-
-function smoothRawPreview(smoothing) {
-  if (!state.targetRawPreview) return;
-  if (!state.displayRawPreview) {
-    state.displayRawPreview = cloneRawPreview(state.targetRawPreview);
-    return;
-  }
-  for (const [channel, samples] of Object.entries(state.targetRawPreview)) {
-    const displayed = state.displayRawPreview[channel];
-    if (!displayed || displayed.length !== samples.length) {
-      state.displayRawPreview[channel] = [...samples];
-      continue;
-    }
-    for (let index = 0; index < samples.length; index += 1) {
-      displayed[index] = lerpNumber(displayed[index], samples[index], smoothing);
-    }
-  }
 }
 
 function lerpNumber(current, target, amount) {
@@ -502,8 +452,8 @@ function drawTraces() {
   traceCtx.fillStyle = "rgba(255,255,255,0.025)";
   traceCtx.fillRect(0, 0, width, height);
 
-  if (!state.displayRawPreview) return;
-  const channels = Object.entries(state.displayRawPreview);
+  if (!state.frame?.raw_preview) return;
+  const channels = Object.entries(state.frame.raw_preview);
   const lane = height / channels.length;
   channels.forEach(([channel, samples], channelIndex) => {
     const yMid = lane * channelIndex + lane / 2;
@@ -583,7 +533,7 @@ function drawHeadmap() {
 
 function animate() {
   if (!state.paused) {
-    updateSmoothHud();
+    updateSmoothBands();
     drawField();
     drawTraces();
     drawHeadmap();
