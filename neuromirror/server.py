@@ -45,6 +45,7 @@ class NeuroMirrorHandler(BaseHTTPRequestHandler):
         seconds = _float_query(query, "seconds", 24.0)
         speed = _float_query(query, "speed", 1.0)
         seed = int(_float_query(query, "seed", 7))
+        start_after = _float_query(query, "start_after", -1.0)
         source = query.get("source", ["openneuro"])[0]
         config = ReplayConfig(speed=speed)
 
@@ -73,12 +74,15 @@ class NeuroMirrorHandler(BaseHTTPRequestHandler):
                 data = bandpass(data, sample_rate_hz=config.sample_rate_hz)
 
             for frame in replay_frames(data, times, labels, config):
+                if float(frame["time_s"]) <= start_after:
+                    continue
                 try:
                     self.wfile.write(f"data: {json.dumps(frame)}\n\n".encode("utf-8"))
                     self.wfile.flush()
                 except BrokenPipeError:
                     return
                 time.sleep(config.step_seconds / max(config.speed, 0.001))
+            start_after = -1.0
             seed += 1
 
 

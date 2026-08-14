@@ -56,7 +56,6 @@ const bandLaneOffset = { delta: -34, theta: -17, alpha: 0, beta: 17, gamma: 34 }
 
 const state = {
   frame: null,
-  heldFrame: null,
   bands: { delta: 0, theta: 0, alpha: 0, beta: 0, gamma: 0 },
   normalized: { delta: 0, theta: 0, alpha: 0, beta: 0, gamma: 0 },
   displayNormalized: { delta: 0, theta: 0, alpha: 0, beta: 0, gamma: 0 },
@@ -108,27 +107,37 @@ pauseButton.addEventListener("click", () => {
   pauseButton.classList.toggle("is-paused", state.paused);
   pauseButton.setAttribute("aria-label", state.paused ? "Play replay" : "Pause replay");
   pauseButton.setAttribute("aria-pressed", String(state.paused));
-  if (!state.paused && state.heldFrame) {
-    applyFrame(state.heldFrame);
-    state.heldFrame = null;
+  if (state.paused) {
+    closeStream();
+    return;
   }
+  connectStream(state.lastFrameTime);
 });
 
-function connectStream() {
-  if (stream) stream.close();
-  stateEl.textContent = "connecting";
-  artifactEl.textContent = "loading real EEG";
+function closeStream() {
+  if (!stream) return;
+  stream.close();
+  stream = null;
+}
+
+function connectStream(startAfter = null) {
+  closeStream();
+  if (!state.frame) {
+    stateEl.textContent = "connecting";
+    artifactEl.textContent = "loading real EEG";
+  }
   const params = new URLSearchParams({ source: "openneuro", seconds: "24", speed: "1.35" });
+  if (Number.isFinite(startAfter)) {
+    params.set("start_after", startAfter.toFixed(3));
+  }
   stream = new EventSource(`/api/stream?${params}`);
   stream.onmessage = (event) => {
     const frame = JSON.parse(event.data);
-    if (state.paused) {
-      state.heldFrame = frame;
-      return;
-    }
+    if (state.paused) return;
     applyFrame(frame);
   };
   stream.onerror = () => {
+    if (state.paused) return;
     artifactEl.textContent = "real EEG not found";
     artifactEl.style.color = "var(--yellow)";
   };
