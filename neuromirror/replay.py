@@ -9,7 +9,7 @@ import numpy as np
 
 from neuromirror.config import ReplayConfig
 from neuromirror.processing.artifacts import artifact_intensity, channel_quality, detect_blink_like_artifact
-from neuromirror.processing.bandpower import bandpower_by_channel, posterior_alpha_ratio
+from neuromirror.processing.bandpower import bandpower_by_channel, posterior_alpha_ratio, psd_by_channel
 from neuromirror.processing.features import (
     dominant_rhythm,
     hemispheric_balance,
@@ -30,6 +30,7 @@ def replay_frames(
         start = end - config.window_samples
         window = data[:, start:end]
         features = bandpower_by_channel(window, config.sample_rate_hz, config.channels)
+        spectra = psd_by_channel(window, config.sample_rate_hz, config.channels)
         summary = {
             "posterior_alpha_ratio": posterior_alpha_ratio(features),
             "blink_like_artifact": detect_blink_like_artifact(window, config.channels),
@@ -48,6 +49,7 @@ def replay_frames(
                 "frame_id": frame_id,
                 "state": labels[end - 1],
                 "features": features,
+                "spectra": spectra,
                 "raw_preview": _raw_preview(window, config.channels),
                 "summary": summary,
             },

@@ -22,6 +22,10 @@ def test_synthetic_replay_emits_alpha_summary() -> None:
     assert "measurement_confidence" in frames[0]["summary"]
     assert "normalized_features" in frames[0]
     assert "normalized_bands" in frames[0]
+    assert "spectra" in frames[0]
+    assert "frequencies_hz" in frames[0]["spectra"]["O1"]
+    assert "power_uv2_per_hz" in frames[0]["spectra"]["O1"]
+    assert "alpha_peak_hz" in frames[0]["spectra"]["O1"]
     assert frames[0]["scaling"]["display_band_power_unit"] == "uV^2"
     assert frames[0]["frame_id"] == 0
     assert frames[1]["frame_id"] == 1

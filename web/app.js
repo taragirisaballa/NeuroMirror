@@ -6,6 +6,8 @@ const headmap = document.querySelector("#headmap");
 const headCtx = headmap.getContext("2d");
 const labTrace = document.querySelector("#lab-trace");
 const labTraceCtx = labTrace.getContext("2d");
+const labPsd = document.querySelector("#lab-psd");
+const labPsdCtx = labPsd.getContext("2d");
 const stateEl = document.querySelector("#state");
 const timeEl = document.querySelector("#time");
 const artifactEl = document.querySelector("#artifact");
@@ -32,6 +34,7 @@ const labChannelEl = document.querySelector("#lab-channel");
 const labDominantEl = document.querySelector("#lab-dominant");
 const labConfidenceEl = document.querySelector("#lab-confidence");
 const labArtifactEl = document.querySelector("#lab-artifact");
+const labAlphaPeakEl = document.querySelector("#lab-alpha-peak");
 const labBandsEl = document.querySelector("#lab-bands");
 const experimentWindowCountEl = document.querySelector("#experiment-window-count");
 const experimentSummaryEl = document.querySelector("#experiment-summary");
@@ -73,6 +76,13 @@ const projectionAnchors = [
 const bandTracePhase = { delta: 0.2, theta: 1.1, alpha: 2.0, beta: 2.9, gamma: 3.8 };
 const bandLaneOffset = { delta: -34, theta: -17, alpha: 0, beta: 17, gamma: 34 };
 const streamFrameDelayMs = (0.25 / 1.35) * 1000;
+const psdBandRanges = {
+  delta: [1, 4],
+  theta: [4, 8],
+  alpha: [8, 13],
+  beta: [13, 30],
+  gamma: [30, 45],
+};
 
 const state = {
   frame: null,
@@ -170,6 +180,7 @@ function resize() {
   resizeCanvas(traces, traceCtx);
   resizeCanvas(headmap, headCtx);
   resizeCanvas(labTrace, labTraceCtx);
+  resizeCanvas(labPsd, labPsdCtx);
 }
 
 window.addEventListener("resize", resize);
@@ -999,6 +1010,7 @@ function renderSignalLab() {
   const channel = state.selectedChannel;
   const rawBands = state.frame.features?.[channel] || {};
   const normalizedBands = state.frame.normalized_features?.[channel] || {};
+  const spectrum = state.frame.spectra?.[channel];
   const samples = state.frame.raw_preview?.[channel] || [];
   const dominant = dominantChannelBand(rawBands);
   const confidence = numberOrZero(state.frame.summary.measurement_confidence || 1);
@@ -1009,8 +1021,10 @@ function renderSignalLab() {
   labConfidenceEl.textContent = `${Math.round(confidence * 100)}%`;
   labArtifactEl.textContent = state.frame.summary.blink_like_artifact ? "blink-like" : "clean";
   labArtifactEl.style.color = state.frame.summary.blink_like_artifact ? "var(--yellow)" : "var(--green)";
+  labAlphaPeakEl.textContent = Number.isFinite(spectrum?.alpha_peak_hz) ? `${spectrum.alpha_peak_hz.toFixed(2)} Hz` : "-- Hz";
 
   drawSelectedRawTrace(samples, dominant, width, height);
+  drawSelectedPsd(spectrum, dominant);
 
   [...labBandsEl.querySelectorAll(".lab-band")].forEach((row) => {
     const band = row.dataset.band;
@@ -1038,6 +1052,101 @@ function drawSelectedRawTrace(samples, dominant, width, height) {
   labTraceCtx.fillStyle = "rgba(244,247,244,0.54)";
   labTraceCtx.font = "10px ui-sans-serif, system-ui";
   labTraceCtx.fillText(`${state.selectedChannel} raw preview · µV`, 8, 14);
+}
+
+function drawSelectedPsd(spectrum, dominant) {
+  const rect = labPsd.getBoundingClientRect();
+  const width = rect.width;
+  const height = rect.height;
+  labPsdCtx.clearRect(0, 0, width, height);
+  labPsdCtx.fillStyle = "rgba(255,255,255,0.025)";
+  labPsdCtx.fillRect(0, 0, width, height);
+
+  const frequencies = spectrum?.frequencies_hz || [];
+  const powers = spectrum?.power_uv2_per_hz || [];
+  if (frequencies.length < 2 || powers.length !== frequencies.length) {
+    labPsdCtx.fillStyle = "rgba(244,247,244,0.54)";
+    labPsdCtx.font = "10px ui-sans-serif, system-ui";
+    labPsdCtx.fillText("PSD waiting · µV²/Hz", 8, 14);
+    return;
+  }
+
+  const padding = { left: 30, right: 10, top: 16, bottom: 22 };
+  const plotWidth = Math.max(1, width - padding.left - padding.right);
+  const plotHeight = Math.max(1, height - padding.top - padding.bottom);
+  const logPowers = powers.map((value) => Math.log10(Math.max(value, 1e-6)));
+  const yMin = Math.min(...logPowers);
+  const yMax = Math.max(...logPowers);
+  const yRange = Math.max(0.001, yMax - yMin);
+  const xFor = (frequency) => padding.left + ((frequency - 1) / 44) * plotWidth;
+  const yFor = (logPower) => padding.top + (1 - (logPower - yMin) / yRange) * plotHeight;
+
+  labPsdCtx.save();
+  for (const [band, [low, high]] of Object.entries(psdBandRanges)) {
+    const x = xFor(low);
+    const bandWidth = xFor(high) - x;
+    labPsdCtx.fillStyle = colorWithAlpha(bandColors[band], band === dominant ? 0.13 : 0.055);
+    labPsdCtx.fillRect(x, padding.top, bandWidth, plotHeight);
+  }
+
+  labPsdCtx.strokeStyle = "rgba(244,247,244,0.18)";
+  labPsdCtx.lineWidth = 1;
+  labPsdCtx.beginPath();
+  labPsdCtx.moveTo(padding.left, padding.top);
+  labPsdCtx.lineTo(padding.left, padding.top + plotHeight);
+  labPsdCtx.lineTo(padding.left + plotWidth, padding.top + plotHeight);
+  labPsdCtx.stroke();
+
+  for (const tick of [1, 8, 13, 30, 45]) {
+    const x = xFor(tick);
+    labPsdCtx.strokeStyle = "rgba(244,247,244,0.1)";
+    labPsdCtx.beginPath();
+    labPsdCtx.moveTo(x, padding.top);
+    labPsdCtx.lineTo(x, padding.top + plotHeight);
+    labPsdCtx.stroke();
+    labPsdCtx.fillStyle = "rgba(244,247,244,0.48)";
+    labPsdCtx.font = "9px ui-sans-serif, system-ui";
+    labPsdCtx.textAlign = "center";
+    labPsdCtx.fillText(`${tick}`, x, height - 7);
+  }
+
+  labPsdCtx.strokeStyle = bandColors[dominant] || "rgba(244,247,244,0.9)";
+  labPsdCtx.lineWidth = 1.5;
+  labPsdCtx.beginPath();
+  logPowers.forEach((logPower, index) => {
+    const x = xFor(frequencies[index]);
+    const y = yFor(logPower);
+    if (index === 0) labPsdCtx.moveTo(x, y);
+    else labPsdCtx.lineTo(x, y);
+  });
+  labPsdCtx.stroke();
+
+  if (Number.isFinite(spectrum.alpha_peak_hz)) {
+    const peakIndex = frequencies.reduce((best, frequency, index) => (
+      Math.abs(frequency - spectrum.alpha_peak_hz) < Math.abs(frequencies[best] - spectrum.alpha_peak_hz) ? index : best
+    ), 0);
+    const x = xFor(frequencies[peakIndex]);
+    const y = yFor(logPowers[peakIndex]);
+    labPsdCtx.fillStyle = bandColors.alpha;
+    labPsdCtx.shadowBlur = 10;
+    labPsdCtx.shadowColor = bandColors.alpha;
+    labPsdCtx.beginPath();
+    labPsdCtx.arc(x, y, 3, 0, Math.PI * 2);
+    labPsdCtx.fill();
+    labPsdCtx.shadowBlur = 0;
+    labPsdCtx.fillStyle = "rgba(244,247,244,0.72)";
+    labPsdCtx.textAlign = "left";
+    labPsdCtx.font = "10px ui-sans-serif, system-ui";
+    labPsdCtx.fillText(`${spectrum.alpha_peak_hz.toFixed(1)} Hz`, Math.min(x + 6, width - 42), Math.max(12, y - 6));
+  }
+
+  labPsdCtx.fillStyle = "rgba(244,247,244,0.54)";
+  labPsdCtx.font = "10px ui-sans-serif, system-ui";
+  labPsdCtx.textAlign = "left";
+  labPsdCtx.fillText(`${state.selectedChannel} PSD · log µV²/Hz`, 8, 12);
+  labPsdCtx.textAlign = "right";
+  labPsdCtx.fillText("Hz", width - 8, height - 7);
+  labPsdCtx.restore();
 }
 
 function dominantChannelBand(rawBands) {
