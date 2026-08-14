@@ -4,6 +4,8 @@ const traces = document.querySelector("#traces");
 const traceCtx = traces.getContext("2d");
 const headmap = document.querySelector("#headmap");
 const headCtx = headmap.getContext("2d");
+const labTrace = document.querySelector("#lab-trace");
+const labTraceCtx = labTrace.getContext("2d");
 const stateEl = document.querySelector("#state");
 const timeEl = document.querySelector("#time");
 const artifactEl = document.querySelector("#artifact");
@@ -24,6 +26,13 @@ const syncModulesEl = document.querySelector("#sync-modules");
 const syncO1AlphaEl = document.querySelector("#sync-o1-alpha");
 const syncO2AlphaEl = document.querySelector("#sync-o2-alpha");
 const syncAlphaNormEl = document.querySelector("#sync-alpha-norm");
+const labChannelsEl = document.querySelector("#lab-channels");
+const labFrameEl = document.querySelector("#lab-frame");
+const labChannelEl = document.querySelector("#lab-channel");
+const labDominantEl = document.querySelector("#lab-dominant");
+const labConfidenceEl = document.querySelector("#lab-confidence");
+const labArtifactEl = document.querySelector("#lab-artifact");
+const labBandsEl = document.querySelector("#lab-bands");
 
 const bandColors = {
   delta: "#4df6ff",
@@ -78,8 +87,10 @@ const state = {
     inset: null,
     bars: null,
     raw: null,
+    lab: null,
     metrics: null,
   },
+  selectedChannel: "O1",
   phase: 0,
   paused: false,
 };
@@ -100,6 +111,31 @@ for (const band of bandNames) {
   row.className = "band";
   row.innerHTML = `<span>${band}</span><div class="bar"><span style="color:${bandColors[band]};background:${bandColors[band]}"></span></div><output>0%</output>`;
   bandsEl.appendChild(row);
+
+  const labRow = document.createElement("div");
+  labRow.className = "lab-band";
+  labRow.dataset.band = band;
+  labRow.innerHTML = `<span>${band}</span><strong>0.00 µV²</strong><output>0.00</output>`;
+  labBandsEl.appendChild(labRow);
+}
+
+for (const channel of Object.keys(electrodeLayout)) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = channel;
+  button.className = channel === state.selectedChannel ? "is-selected" : "";
+  button.addEventListener("click", () => {
+    state.selectedChannel = channel;
+    updateChannelButtons();
+    renderSignalLab();
+  });
+  labChannelsEl.appendChild(button);
+}
+
+function updateChannelButtons() {
+  [...labChannelsEl.querySelectorAll("button")].forEach((button) => {
+    button.classList.toggle("is-selected", button.textContent === state.selectedChannel);
+  });
 }
 
 function resizeCanvas(canvas, ctx) {
@@ -114,6 +150,7 @@ function resize() {
   resizeCanvas(field, fieldCtx);
   resizeCanvas(traces, traceCtx);
   resizeCanvas(headmap, headCtx);
+  resizeCanvas(labTrace, labTraceCtx);
 }
 
 window.addEventListener("resize", resize);
@@ -886,6 +923,66 @@ function drawTraces() {
   });
 }
 
+function renderSignalLab() {
+  if (state.frame) markRendered("lab", state.frame);
+  const rect = labTrace.getBoundingClientRect();
+  const width = rect.width;
+  const height = rect.height;
+  labTraceCtx.clearRect(0, 0, width, height);
+  labTraceCtx.fillStyle = "rgba(255,255,255,0.025)";
+  labTraceCtx.fillRect(0, 0, width, height);
+
+  if (!state.frame) return;
+  const channel = state.selectedChannel;
+  const rawBands = state.frame.features?.[channel] || {};
+  const normalizedBands = state.frame.normalized_features?.[channel] || {};
+  const samples = state.frame.raw_preview?.[channel] || [];
+  const dominant = dominantChannelBand(rawBands);
+  const confidence = numberOrZero(state.frame.summary.measurement_confidence || 1);
+
+  labFrameEl.textContent = `${formatFrameId(state.frame)} · ${state.frame.time_s.toFixed(3)}s`;
+  labChannelEl.textContent = channel;
+  labDominantEl.textContent = dominant;
+  labConfidenceEl.textContent = `${Math.round(confidence * 100)}%`;
+  labArtifactEl.textContent = state.frame.summary.blink_like_artifact ? "blink-like" : "clean";
+  labArtifactEl.style.color = state.frame.summary.blink_like_artifact ? "var(--yellow)" : "var(--green)";
+
+  drawSelectedRawTrace(samples, dominant, width, height);
+
+  [...labBandsEl.querySelectorAll(".lab-band")].forEach((row) => {
+    const band = row.dataset.band;
+    const raw = rawBands[band] || 0;
+    const normalized = normalizedBands[band] || 0;
+    row.style.borderColor = band === dominant ? colorWithAlpha(bandColors[band], 0.42) : "rgba(255, 255, 255, 0.08)";
+    row.querySelector("strong").textContent = `${formatBandPowerUv2(raw)} µV²`;
+    row.querySelector("output").textContent = normalized.toFixed(2);
+  });
+}
+
+function drawSelectedRawTrace(samples, dominant, width, height) {
+  if (!samples.length) return;
+  labTraceCtx.strokeStyle = bandColors[dominant] || "#f4f7f4";
+  labTraceCtx.lineWidth = 1.3;
+  labTraceCtx.beginPath();
+  samples.forEach((sample, index) => {
+    const x = (index / Math.max(1, samples.length - 1)) * width;
+    const y = height * 0.5 - Math.max(-1, Math.min(1, sample / 80)) * height * 0.4;
+    if (index === 0) labTraceCtx.moveTo(x, y);
+    else labTraceCtx.lineTo(x, y);
+  });
+  labTraceCtx.stroke();
+
+  labTraceCtx.fillStyle = "rgba(244,247,244,0.54)";
+  labTraceCtx.font = "10px ui-sans-serif, system-ui";
+  labTraceCtx.fillText(`${state.selectedChannel} raw preview · µV`, 8, 14);
+}
+
+function dominantChannelBand(rawBands) {
+  return bandNames.reduce((best, band) => (
+    (rawBands[band] || 0) > (rawBands[best] || 0) ? band : best
+  ), "delta");
+}
+
 function drawHeadmap() {
   if (state.frame) markRendered("inset", state.frame);
   const rect = headmap.getBoundingClientRect();
@@ -961,6 +1058,7 @@ function animate() {
     updateSmoothBands();
     drawField();
     drawTraces();
+    renderSignalLab();
     drawHeadmap();
   }
   requestAnimationFrame(animate);

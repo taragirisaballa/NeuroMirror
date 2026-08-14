@@ -240,6 +240,37 @@ h2 {
   margin-top: 12px;
 }
 
+#lab-trace {
+  width: 100%;
+  height: 92px;
+  display: block;
+  margin-top: 12px;
+}
+
+.channel-picker {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.channel-picker button {
+  appearance: none;
+  min-width: 0;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--muted);
+  font: 700 0.72rem ui-sans-serif, system-ui;
+  cursor: pointer;
+}
+
+.channel-picker button.is-selected {
+  border-color: rgba(255, 228, 92, 0.64);
+  color: var(--text);
+  background: rgba(255, 228, 92, 0.08);
+}
+
 .metrics {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -260,6 +291,55 @@ h2 {
 .metrics strong {
   font-size: 1rem;
   text-transform: capitalize;
+}
+
+.lab-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.lab-grid div,
+.lab-band {
+  min-height: 50px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.lab-grid strong {
+  color: var(--text);
+  font-size: 0.9rem;
+  text-transform: capitalize;
+}
+
+.lab-bands {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.lab-band {
+  grid-template-columns: 48px 1fr 48px;
+  align-items: center;
+  min-height: 38px;
+  font-size: 0.78rem;
+}
+
+.lab-band span {
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.lab-band strong,
+.lab-band output {
+  color: var(--text);
+  font-size: 0.78rem;
+  text-align: right;
 }
 
 .sync-audit {
