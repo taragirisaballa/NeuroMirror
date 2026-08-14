@@ -13,6 +13,12 @@ def test_synthetic_replay_emits_alpha_summary() -> None:
 
     assert frames
     assert "posterior_alpha_ratio" in frames[0]["summary"]
+    assert "dominant_rhythm" in frames[0]["summary"]
+    assert "signal_amplitude_uv" in frames[0]["summary"]
+    assert "artifact_intensity" in frames[0]["summary"]
+    assert "hemispheric_balance" in frames[0]["summary"]
+    assert "posterior_alpha_asymmetry" in frames[0]["summary"]
+    assert "spectral_spread" in frames[0]["summary"]
     assert "O1" in frames[0]["raw_preview"]
     assert frames[0]["state"] == "eyes_open"
     assert frames[-1]["state"] == "eyes_closed"

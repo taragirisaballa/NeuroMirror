@@ -20,8 +20,16 @@
           <span id="time">0.000s</span>
         </div>
         <div class="source-panel" aria-label="Replay source">
+          <button id="pause" aria-pressed="false">Pause</button>
           <button class="active" data-source="synthetic">Synthetic Demo</button>
           <button data-source="openneuro">Real EEG</button>
+        </div>
+        <div class="anatomy-panel" aria-label="Sagittal scalp map">
+          <div class="module-heading">
+            <h2>Scalp Map</h2>
+            <span>sagittal view</span>
+          </div>
+          <canvas id="headmap"></canvas>
         </div>
       </section>
 
@@ -40,6 +48,21 @@
             <span>microvolts</span>
           </div>
           <canvas id="traces"></canvas>
+        </section>
+
+        <section class="module">
+          <div class="module-heading">
+            <h2>Extracted Features</h2>
+            <span>from signal windows</span>
+          </div>
+          <div class="metrics">
+            <div><span class="label">Dominant Rhythm</span><strong id="dominant">waiting</strong></div>
+            <div><span class="label">Amplitude</span><strong id="amplitude">0 uV</strong></div>
+            <div><span class="label">Artifact Intensity</span><strong id="artifact-intensity">0%</strong></div>
+            <div><span class="label">Spectral Spread</span><strong id="spread">0%</strong></div>
+            <div><span class="label">Left / Right Alpha</span><strong id="balance">centered</strong></div>
+            <div><span class="label">O1 / O2 Alpha</span><strong id="asymmetry">centered</strong></div>
+          </div>
         </section>
 
         <section class="module compact">

@@ -57,6 +57,9 @@ In the dashboard, switch from `Synthetic Demo` to `Real EEG`.
 - Alpha reactivity during eyes-open / eyes-closed replay
 - Simple channel quality signals
 - Blink-like artifact flags
+- Dominant rhythm, signal amplitude, spectral spread, and artifact intensity
+- Hemispheric alpha balance and O1/O2 posterior alpha asymmetry
+- Approximate sagittal scalp map for selected frontal, central, and occipital channels
 - Region summaries for future visual mapping
 
 ## Project Shape
