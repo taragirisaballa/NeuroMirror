@@ -25,6 +25,13 @@ def test_synthetic_replay_emits_alpha_summary() -> None:
     assert frames[0]["scaling"]["display_band_power_unit"] == "uV^2"
     assert frames[0]["frame_id"] == 0
     assert frames[1]["frame_id"] == 1
+    assert frames[0]["experiment"]["name"] == "Eyes Open vs Eyes Closed"
+    assert frames[0]["experiment"]["total_windows"] == len(frames)
+    assert (
+        frames[0]["experiment"]["clean_windows"] + frames[0]["experiment"]["excluded_windows"]
+        == len(frames)
+    )
+    assert "posterior_alpha" in frames[0]["experiment"]["comparisons"]
     assert "O1" in frames[0]["raw_preview"]
     assert frames[0]["state"] == "eyes_open"
     assert frames[-1]["state"] == "eyes_closed"

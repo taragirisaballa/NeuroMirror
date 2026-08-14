@@ -57,10 +57,12 @@ def replay_frames(
         return
 
     scaling = robust_band_scaling([frame["features"] for frame in frames])
+    experiment = eyes_open_closed_analysis(frames)
     for frame in frames:
         normalized_features = normalize_features(frame["features"], scaling)
         frame["normalized_features"] = normalized_features
         frame["normalized_bands"] = average_normalized_bands(normalized_features)
+        frame["experiment"] = experiment
         frame["scaling"] = {
             "band_power_unit": "V^2",
             "display_band_power_unit": "uV^2",
@@ -120,6 +122,71 @@ def average_normalized_bands(normalized_features: dict[str, dict[str, float]]) -
             totals[band] = totals.get(band, 0.0) + value
             counts[band] = counts.get(band, 0) + 1
     return {band: round(total / counts[band], 4) for band, total in totals.items()}
+
+
+def eyes_open_closed_analysis(frames: list[dict[str, object]], min_confidence: float = 0.5) -> dict[str, object]:
+    clean_frames = [
+        frame
+        for frame in frames
+        if not bool(frame["summary"].get("blink_like_artifact"))
+        and float(frame["summary"].get("measurement_confidence", 0.0)) >= min_confidence
+    ]
+    excluded = len(frames) - len(clean_frames)
+    comparisons = {
+        "O1_alpha": state_comparison(clean_frames, ("O1",), "alpha"),
+        "O2_alpha": state_comparison(clean_frames, ("O2",), "alpha"),
+        "posterior_alpha": state_comparison(clean_frames, ("O1", "O2"), "alpha"),
+        "C3_alpha": state_comparison(clean_frames, ("C3",), "alpha"),
+        "C4_alpha": state_comparison(clean_frames, ("C4",), "alpha"),
+    }
+    return {
+        "name": "Eyes Open vs Eyes Closed",
+        "clean_windows": len(clean_frames),
+        "excluded_windows": excluded,
+        "total_windows": len(frames),
+        "min_confidence": min_confidence,
+        "comparisons": comparisons,
+    }
+
+
+def state_comparison(frames: list[dict[str, object]], channels: tuple[str, ...], band: str) -> dict[str, float | int | None]:
+    open_values = state_band_values(frames, "eyes_open", channels, band)
+    closed_values = state_band_values(frames, "eyes_closed", channels, band)
+    open_mean = mean_or_none(open_values)
+    closed_mean = mean_or_none(closed_values)
+    percent_change = None
+    if open_mean is not None and closed_mean is not None and open_mean > 0:
+        percent_change = ((closed_mean - open_mean) / open_mean) * 100.0
+    return {
+        "eyes_open_uv2": round(open_mean * 1e12, 3) if open_mean is not None else None,
+        "eyes_closed_uv2": round(closed_mean * 1e12, 3) if closed_mean is not None else None,
+        "percent_change": round(percent_change, 1) if percent_change is not None else None,
+        "open_windows": len(open_values),
+        "closed_windows": len(closed_values),
+    }
+
+
+def state_band_values(
+    frames: list[dict[str, object]],
+    state: str,
+    channels: tuple[str, ...],
+    band: str,
+) -> list[float]:
+    values: list[float] = []
+    for frame in frames:
+        if frame["state"] != state:
+            continue
+        channel_values = [frame["features"].get(channel, {}).get(band) for channel in channels]
+        channel_values = [value for value in channel_values if value is not None]
+        if channel_values:
+            values.append(float(np.mean(channel_values)))
+    return values
+
+
+def mean_or_none(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return float(np.mean(values))
 
 
 def print_replay(

@@ -33,6 +33,8 @@ const labDominantEl = document.querySelector("#lab-dominant");
 const labConfidenceEl = document.querySelector("#lab-confidence");
 const labArtifactEl = document.querySelector("#lab-artifact");
 const labBandsEl = document.querySelector("#lab-bands");
+const experimentWindowCountEl = document.querySelector("#experiment-window-count");
+const experimentRowsEl = document.querySelector("#experiment-rows");
 
 const bandColors = {
   delta: "#4df6ff",
@@ -130,6 +132,22 @@ for (const channel of Object.keys(electrodeLayout)) {
     renderSignalLab();
   });
   labChannelsEl.appendChild(button);
+}
+
+const experimentRows = [
+  ["O1 α", "O1_alpha"],
+  ["O2 α", "O2_alpha"],
+  ["Posterior α", "posterior_alpha"],
+  ["C3 α", "C3_alpha"],
+  ["C4 α", "C4_alpha"],
+];
+
+for (const [label, key] of experimentRows) {
+  const row = document.createElement("div");
+  row.className = "experiment-row";
+  row.dataset.key = key;
+  row.innerHTML = `<span>${label}</span><strong>-- → --</strong><output>--</output>`;
+  experimentRowsEl.appendChild(row);
 }
 
 function updateChannelButtons() {
@@ -287,6 +305,7 @@ function updateHud(frame) {
   spreadEl.textContent = `${Math.round(numberOrZero(frame.summary.spectral_spread) * 100)}%`;
   balanceEl.textContent = signedLabel(numberOrZero(frame.summary.hemispheric_balance), "left", "right");
   asymmetryEl.textContent = signedLabel(numberOrZero(frame.summary.posterior_alpha_asymmetry), "O1", "O2");
+  updateExperimentPanel(frame);
 }
 
 function updateSmoothBands() {
@@ -356,6 +375,35 @@ function updateSyncAudit() {
   syncO1AlphaEl.textContent = `${formatBandPowerUv2(rawO1Alpha)} µV²`;
   syncO2AlphaEl.textContent = `${formatBandPowerUv2(rawO2Alpha)} µV²`;
   syncAlphaNormEl.textContent = `${normalizedO1Alpha.toFixed(2)} / ${normalizedO2Alpha.toFixed(2)}`;
+}
+
+function updateExperimentPanel(frame) {
+  const experiment = frame.experiment;
+  if (!experiment) return;
+  experimentWindowCountEl.textContent = `${experiment.clean_windows}/${experiment.total_windows} clean`;
+  [...experimentRowsEl.querySelectorAll(".experiment-row")].forEach((row) => {
+    const comparison = experiment.comparisons?.[row.dataset.key];
+    if (!comparison) return;
+    row.querySelector("strong").textContent = `${formatOptionalUv2(comparison.eyes_open_uv2)} → ${formatOptionalUv2(comparison.eyes_closed_uv2)}`;
+    row.querySelector("output").textContent = formatPercentChange(comparison.percent_change);
+    row.classList.toggle("is-increase", numberOrZero(comparison.percent_change) > 0);
+  });
+}
+
+function formatOptionalUv2(value) {
+  return Number.isFinite(value) ? `${formatUv2Number(value)} µV²` : "--";
+}
+
+function formatUv2Number(value) {
+  if (value >= 100) return value.toFixed(0);
+  if (value >= 10) return value.toFixed(1);
+  return value.toFixed(2);
+}
+
+function formatPercentChange(value) {
+  if (!Number.isFinite(value)) return "--";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(0)}%`;
 }
 
 function signedLabel(value, positive, negative) {
