@@ -26,6 +26,12 @@ def test_synthetic_replay_emits_alpha_summary() -> None:
     assert "frequencies_hz" in frames[0]["spectra"]["O1"]
     assert "power_uv2_per_hz" in frames[0]["spectra"]["O1"]
     assert "alpha_peak_hz" in frames[0]["spectra"]["O1"]
+    assert "spectrogram" in frames[0]
+    assert frames[0]["spectrogram"]["channels"] == ["O1", "O2"]
+    assert frames[0]["spectrogram"]["times_s"]
+    assert frames[0]["spectrogram"]["normalized_log_power"]
+    assert len(frames[0]["spectrogram"]["times_s"]) == len(frames[0]["spectrogram"]["normalized_log_power"])
+    assert "spectrogram" not in frames[1]
     assert frames[0]["scaling"]["display_band_power_unit"] == "uV^2"
     assert frames[0]["frame_id"] == 0
     assert frames[1]["frame_id"] == 1

@@ -60,11 +60,14 @@ def replay_frames(
 
     scaling = robust_band_scaling([frame["features"] for frame in frames])
     experiment = eyes_open_closed_analysis(frames)
+    spectrogram = posterior_spectrogram(frames)
     for frame in frames:
         normalized_features = normalize_features(frame["features"], scaling)
         frame["normalized_features"] = normalized_features
         frame["normalized_bands"] = average_normalized_bands(normalized_features)
         frame["experiment"] = experiment
+        if frame["frame_id"] == 0:
+            frame["spectrogram"] = spectrogram
         frame["scaling"] = {
             "band_power_unit": "V^2",
             "display_band_power_unit": "uV^2",
@@ -162,6 +165,58 @@ def eyes_open_closed_analysis(
             "summary": posterior_alpha_summary(posterior, min_state_windows),
         },
     }
+
+
+def posterior_spectrogram(frames: list[dict[str, object]], channels: tuple[str, str] = ("O1", "O2")) -> dict[str, object]:
+    if not frames:
+        return {"times_s": [], "frequencies_hz": [], "power": [], "state_boundary_s": None}
+
+    first_spectrum = dict(dict(frames[0].get("spectra", {})).get(channels[0], {}))
+    frequencies = list(first_spectrum.get("frequencies_hz", []))
+    rows: list[list[float]] = []
+    times: list[float] = []
+    states: list[str] = []
+
+    for frame in frames:
+        spectra = dict(frame.get("spectra", {}))
+        channel_powers = []
+        for channel in channels:
+            spectrum = dict(spectra.get(channel, {}))
+            powers = spectrum.get("power_uv2_per_hz", [])
+            if len(powers) == len(frequencies):
+                channel_powers.append(np.asarray(powers, dtype=float))
+        if not channel_powers:
+            continue
+        posterior_power = np.mean(np.vstack(channel_powers), axis=0)
+        rows.append([round(float(value), 4) for value in posterior_power])
+        times.append(float(frame["time_s"]))
+        states.append(str(frame["state"]))
+
+    normalized_power = normalize_spectrogram_power(rows)
+    state_boundary_s = next((times[index] for index, state in enumerate(states) if state != states[0]), None) if states else None
+    return {
+        "label": "Posterior PSD over time",
+        "channels": list(channels),
+        "times_s": [round(value, 3) for value in times],
+        "frequencies_hz": frequencies,
+        "power_uv2_per_hz": rows,
+        "normalized_log_power": normalized_power,
+        "state_boundary_s": round(float(state_boundary_s), 3) if state_boundary_s is not None else None,
+        "unit": "uV^2/Hz",
+        "normalization": "log10 posterior PSD, recording-level 5th-95th percentile scaling",
+    }
+
+
+def normalize_spectrogram_power(rows: list[list[float]]) -> list[list[float]]:
+    if not rows:
+        return []
+    values = np.asarray(rows, dtype=float)
+    log_values = np.log10(values + 1e-6)
+    low, high = np.percentile(log_values, [5, 95])
+    if high <= low:
+        high = low + 1.0
+    normalized = np.clip((log_values - low) / (high - low), 0.0, 1.0)
+    return [[round(float(value), 4) for value in row] for row in normalized]
 
 
 def state_comparison(frames: list[dict[str, object]], channels: tuple[str, ...], band: str) -> dict[str, float | int | None]:

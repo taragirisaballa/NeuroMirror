@@ -8,6 +8,8 @@ const labTrace = document.querySelector("#lab-trace");
 const labTraceCtx = labTrace.getContext("2d");
 const labPsd = document.querySelector("#lab-psd");
 const labPsdCtx = labPsd.getContext("2d");
+const spectrogram = document.querySelector("#spectrogram");
+const spectrogramCtx = spectrogram.getContext("2d");
 const stateEl = document.querySelector("#state");
 const timeEl = document.querySelector("#time");
 const artifactEl = document.querySelector("#artifact");
@@ -36,6 +38,7 @@ const labConfidenceEl = document.querySelector("#lab-confidence");
 const labArtifactEl = document.querySelector("#lab-artifact");
 const labAlphaPeakEl = document.querySelector("#lab-alpha-peak");
 const labBandsEl = document.querySelector("#lab-bands");
+const spectrogramFrameEl = document.querySelector("#spectrogram-frame");
 const experimentWindowCountEl = document.querySelector("#experiment-window-count");
 const experimentSummaryEl = document.querySelector("#experiment-summary");
 const experimentRowsEl = document.querySelector("#experiment-rows");
@@ -89,6 +92,7 @@ const state = {
   bands: { delta: 0, theta: 0, alpha: 0, beta: 0, gamma: 0 },
   normalized: { delta: 0, theta: 0, alpha: 0, beta: 0, gamma: 0 },
   displayNormalized: { delta: 0, theta: 0, alpha: 0, beta: 0, gamma: 0 },
+  spectrogram: null,
   trails: Object.fromEntries(bandNames.map((band) => [band, []])),
   latestPoints: {},
   lastFrameTime: null,
@@ -101,6 +105,7 @@ const state = {
     bars: null,
     raw: null,
     lab: null,
+    spectrogram: null,
     metrics: null,
   },
   selectedChannel: "O1",
@@ -181,6 +186,7 @@ function resize() {
   resizeCanvas(headmap, headCtx);
   resizeCanvas(labTrace, labTraceCtx);
   resizeCanvas(labPsd, labPsdCtx);
+  resizeCanvas(spectrogram, spectrogramCtx);
 }
 
 window.addEventListener("resize", resize);
@@ -263,6 +269,7 @@ function applyFrame(frame) {
     resetStateTrails();
   }
   state.frame = frame;
+  state.spectrogram = frame.spectrogram || state.spectrogram;
   state.bands = averageBands(frame.features);
   state.normalized = frame.normalized_bands || normalizeBands(state.bands);
   if (!state.displayInitialized) {
@@ -318,6 +325,7 @@ function updateHud(frame) {
   balanceEl.textContent = signedLabel(numberOrZero(frame.summary.hemispheric_balance), "left", "right");
   asymmetryEl.textContent = signedLabel(numberOrZero(frame.summary.posterior_alpha_asymmetry), "O1", "O2");
   updateExperimentPanel(frame);
+  renderSpectrogram(frame);
 }
 
 function updateSmoothBands() {
@@ -1147,6 +1155,113 @@ function drawSelectedPsd(spectrum, dominant) {
   labPsdCtx.textAlign = "right";
   labPsdCtx.fillText("Hz", width - 8, height - 7);
   labPsdCtx.restore();
+}
+
+function renderSpectrogram(frame) {
+  if (!frame) return;
+  markRendered("spectrogram", frame);
+  const rect = spectrogram.getBoundingClientRect();
+  const width = rect.width;
+  const height = rect.height;
+  spectrogramCtx.clearRect(0, 0, width, height);
+  spectrogramCtx.fillStyle = "rgba(255,255,255,0.025)";
+  spectrogramCtx.fillRect(0, 0, width, height);
+
+  const data = state.spectrogram;
+  const powers = data?.normalized_log_power || [];
+  const times = data?.times_s || [];
+  const frequencies = data?.frequencies_hz || [];
+  if (!powers.length || !times.length || !frequencies.length) {
+    spectrogramFrameEl.textContent = "waiting";
+    spectrogramCtx.fillStyle = "rgba(244,247,244,0.54)";
+    spectrogramCtx.font = "10px ui-sans-serif, system-ui";
+    spectrogramCtx.fillText("spectrogram waiting", 8, 14);
+    return;
+  }
+
+  spectrogramFrameEl.textContent = `O1/O2 · ${frame.time_s.toFixed(2)}s`;
+  const padding = { left: 30, right: 10, top: 14, bottom: 22 };
+  const plotWidth = Math.max(1, width - padding.left - padding.right);
+  const plotHeight = Math.max(1, height - padding.top - padding.bottom);
+  const timeMin = times[0];
+  const timeMax = times[times.length - 1];
+  const timeRange = Math.max(0.001, timeMax - timeMin);
+  const freqMin = frequencies[0];
+  const freqMax = frequencies[frequencies.length - 1];
+  const freqRange = Math.max(0.001, freqMax - freqMin);
+  const xFor = (time) => padding.left + ((time - timeMin) / timeRange) * plotWidth;
+  const yFor = (frequency) => padding.top + (1 - (frequency - freqMin) / freqRange) * plotHeight;
+  const cellWidth = plotWidth / Math.max(1, times.length);
+  const cellHeight = plotHeight / Math.max(1, frequencies.length);
+
+  spectrogramCtx.save();
+  for (let timeIndex = 0; timeIndex < powers.length; timeIndex += 1) {
+    const column = powers[timeIndex];
+    for (let frequencyIndex = 0; frequencyIndex < column.length; frequencyIndex += 1) {
+      const value = numberOrZero(column[frequencyIndex]);
+      const frequency = frequencies[frequencyIndex];
+      const x = padding.left + timeIndex * cellWidth;
+      const y = yFor(frequency) - cellHeight;
+      spectrogramCtx.fillStyle = spectrogramColor(value, frequency);
+      spectrogramCtx.fillRect(x, y, Math.ceil(cellWidth) + 1, Math.ceil(cellHeight) + 1);
+    }
+  }
+
+  const alphaTop = yFor(13);
+  const alphaBottom = yFor(8);
+  spectrogramCtx.strokeStyle = colorWithAlpha(bandColors.alpha, 0.7);
+  spectrogramCtx.lineWidth = 1;
+  spectrogramCtx.strokeRect(padding.left, alphaTop, plotWidth, Math.max(1, alphaBottom - alphaTop));
+
+  if (Number.isFinite(data.state_boundary_s)) {
+    const boundaryX = xFor(data.state_boundary_s);
+    spectrogramCtx.strokeStyle = "rgba(244,247,244,0.46)";
+    spectrogramCtx.setLineDash([4, 4]);
+    spectrogramCtx.beginPath();
+    spectrogramCtx.moveTo(boundaryX, padding.top);
+    spectrogramCtx.lineTo(boundaryX, padding.top + plotHeight);
+    spectrogramCtx.stroke();
+    spectrogramCtx.setLineDash([]);
+    spectrogramCtx.fillStyle = "rgba(244,247,244,0.58)";
+    spectrogramCtx.font = "9px ui-sans-serif, system-ui";
+    spectrogramCtx.fillText("closed", Math.min(boundaryX + 5, width - 42), padding.top + 11);
+  }
+
+  const cursorX = xFor(frame.time_s);
+  spectrogramCtx.strokeStyle = "rgba(255,255,255,0.92)";
+  spectrogramCtx.lineWidth = 1.2;
+  spectrogramCtx.beginPath();
+  spectrogramCtx.moveTo(cursorX, padding.top);
+  spectrogramCtx.lineTo(cursorX, padding.top + plotHeight);
+  spectrogramCtx.stroke();
+
+  spectrogramCtx.strokeStyle = "rgba(244,247,244,0.18)";
+  spectrogramCtx.strokeRect(padding.left, padding.top, plotWidth, plotHeight);
+  spectrogramCtx.fillStyle = "rgba(244,247,244,0.5)";
+  spectrogramCtx.font = "9px ui-sans-serif, system-ui";
+  spectrogramCtx.textAlign = "right";
+  for (const tick of [8, 13, 30, 45]) {
+    const y = yFor(tick);
+    spectrogramCtx.fillText(`${tick}`, padding.left - 5, y + 3);
+  }
+  spectrogramCtx.textAlign = "left";
+  spectrogramCtx.fillText("Hz", 8, padding.top + 4);
+  spectrogramCtx.fillText("open", padding.left, height - 7);
+  spectrogramCtx.textAlign = "right";
+  spectrogramCtx.fillText("time", width - 8, height - 7);
+  spectrogramCtx.restore();
+}
+
+function spectrogramColor(value, frequency) {
+  const alphaWeight = frequency >= 8 && frequency < 13 ? 1 : 0;
+  const base = alphaWeight ? [255, 228, 92] : [77, 246, 255];
+  const hot = [255, 78, 163];
+  const mix = clamp(value, 0, 1);
+  const red = Math.round(base[0] + (hot[0] - base[0]) * Math.max(0, mix - 0.62) * 1.6);
+  const green = Math.round(base[1] + (hot[1] - base[1]) * Math.max(0, mix - 0.62) * 1.6);
+  const blue = Math.round(base[2] + (hot[2] - base[2]) * Math.max(0, mix - 0.62) * 1.6);
+  const opacity = 0.08 + mix * 0.78;
+  return `rgba(${red}, ${green}, ${blue}, ${opacity})`;
 }
 
 function dominantChannelBand(rawBands) {
