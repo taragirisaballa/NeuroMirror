@@ -133,7 +133,7 @@ for (const band of bandNames) {
   const labRow = document.createElement("div");
   labRow.className = "lab-band";
   labRow.dataset.band = band;
-  labRow.innerHTML = `<span>${band}</span><strong>0.00 µV²</strong><output>0.00</output>`;
+  labRow.innerHTML = `<span>${band}</span><strong>0.00 uV^2</strong><output>0.00</output>`;
   labBandsEl.appendChild(labRow);
 }
 
@@ -314,12 +314,12 @@ function updateHud(frame) {
   markRendered("metrics", frame);
   stateEl.textContent = frame.state.replace("_", " ");
   timeEl.textContent = `${frame.time_s.toFixed(3)}s`;
-  artifactEl.textContent = frame.summary.blink_like_artifact ? "blink-like artifact · µV²" : "signal clean · µV²";
+  artifactEl.textContent = frame.summary.blink_like_artifact ? "blink-like artifact · uV^2" : "signal clean · uV^2";
   artifactEl.style.color = frame.summary.blink_like_artifact ? "var(--yellow)" : "var(--green)";
   alphaRatioEl.textContent = `${frame.summary.posterior_alpha_ratio.toFixed(2)}x`;
   qualityEl.textContent = `${Math.round(numberOrZero(frame.summary.measurement_confidence || 1) * 100)}%`;
   dominantEl.textContent = frame.summary.dominant_rhythm || "warming";
-  amplitudeEl.textContent = `${numberOrZero(frame.summary.signal_amplitude_uv).toFixed(1)} µV`;
+  amplitudeEl.textContent = `${numberOrZero(frame.summary.signal_amplitude_uv).toFixed(1)} uV`;
   artifactIntensityEl.textContent = `${Math.round(numberOrZero(frame.summary.artifact_intensity) * 100)}%`;
   spreadEl.textContent = `${Math.round(numberOrZero(frame.summary.spectral_spread) * 100)}%`;
   balanceEl.textContent = signedLabel(numberOrZero(frame.summary.hemispheric_balance), "left", "right");
@@ -392,8 +392,8 @@ function updateSyncAudit() {
   syncModulesEl.textContent = Object.entries(state.renderedFrames)
     .map(([module, frameId]) => `${module}:${frameId ?? "--"}`)
     .join(" ");
-  syncO1AlphaEl.textContent = `${formatBandPowerUv2(rawO1Alpha)} µV²`;
-  syncO2AlphaEl.textContent = `${formatBandPowerUv2(rawO2Alpha)} µV²`;
+  syncO1AlphaEl.textContent = `${formatBandPowerUv2(rawO1Alpha)} uV^2`;
+  syncO2AlphaEl.textContent = `${formatBandPowerUv2(rawO2Alpha)} uV^2`;
   syncAlphaNormEl.textContent = `${normalizedO1Alpha.toFixed(2)} / ${normalizedO2Alpha.toFixed(2)}`;
 }
 
@@ -414,7 +414,7 @@ function updateExperimentPanel(frame) {
 }
 
 function formatOptionalUv2(value) {
-  return Number.isFinite(value) ? `${formatUv2Number(value)} µV²` : "--";
+  return Number.isFinite(value) ? `${formatUv2Number(value)} uV^2` : "--";
 }
 
 function formatUv2Number(value) {
@@ -1039,7 +1039,7 @@ function renderSignalLab() {
     const raw = rawBands[band] || 0;
     const normalized = normalizedBands[band] || 0;
     row.style.borderColor = band === dominant ? colorWithAlpha(bandColors[band], 0.42) : "rgba(255, 255, 255, 0.08)";
-    row.querySelector("strong").textContent = `${formatBandPowerUv2(raw)} µV²`;
+    row.querySelector("strong").textContent = `${formatBandPowerUv2(raw)} uV^2`;
     row.querySelector("output").textContent = normalized.toFixed(2);
   });
 }
@@ -1059,7 +1059,7 @@ function drawSelectedRawTrace(samples, dominant, width, height) {
 
   labTraceCtx.fillStyle = "rgba(244,247,244,0.54)";
   labTraceCtx.font = "10px ui-sans-serif, system-ui";
-  labTraceCtx.fillText(`${state.selectedChannel} raw preview · µV`, 8, 14);
+  labTraceCtx.fillText(`${state.selectedChannel} raw preview · uV`, 8, 14);
 }
 
 function drawSelectedPsd(spectrum, dominant) {
@@ -1075,7 +1075,7 @@ function drawSelectedPsd(spectrum, dominant) {
   if (frequencies.length < 2 || powers.length !== frequencies.length) {
     labPsdCtx.fillStyle = "rgba(244,247,244,0.54)";
     labPsdCtx.font = "10px ui-sans-serif, system-ui";
-    labPsdCtx.fillText("PSD waiting · µV²/Hz", 8, 14);
+    labPsdCtx.fillText("PSD waiting · uV^2/Hz", 8, 14);
     return;
   }
 
@@ -1151,7 +1151,7 @@ function drawSelectedPsd(spectrum, dominant) {
   labPsdCtx.fillStyle = "rgba(244,247,244,0.54)";
   labPsdCtx.font = "10px ui-sans-serif, system-ui";
   labPsdCtx.textAlign = "left";
-  labPsdCtx.fillText(`${state.selectedChannel} PSD · log µV²/Hz`, 8, 12);
+  labPsdCtx.fillText(`${state.selectedChannel} PSD · log uV^2/Hz`, 8, 12);
   labPsdCtx.textAlign = "right";
   labPsdCtx.fillText("Hz", width - 8, height - 7);
   labPsdCtx.restore();

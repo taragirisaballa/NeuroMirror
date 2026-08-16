@@ -53,7 +53,7 @@ python -m neuromirror.cli dashboard
 
 ## What It Tracks
 
-- Delta, theta, alpha, beta, and gamma integrated bandpower in µV²
+- Delta, theta, alpha, beta, and gamma integrated bandpower in uV^2
 - Alpha reactivity during eyes-open / eyes-closed replay
 - Recording-level robust log-power normalization, so windows are scaled against the session instead of against themselves
 - Simple channel quality and measurement confidence signals
@@ -75,6 +75,9 @@ neuromirror/
   replay.py              live-like replay loop
   server.py              local dashboard server
   synthetic.py           synthetic EEG generator for demos/tests
+  experiments/
+    base.py              experiment preset interface
+    resting_state.py     Experiment 001: eyes-open / eyes-closed posterior alpha
   processing/
     bandpower.py         frequency-band feature extraction
     artifacts.py         simple artifact heuristics
