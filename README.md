@@ -47,6 +47,12 @@ To run Experiment 001 across every locally fetched subject:
 python -m neuromirror.cli cohort-openneuro --dataset-root data/openneuro/ds005385
 ```
 
+To save a cohort report:
+
+```bash
+python -m neuromirror.cli cohort-openneuro --dataset-root data/openneuro/ds005385 --report-dir reports
+```
+
 To include more subjects, fetch them first and rerun the cohort command:
 
 ```bash
@@ -86,6 +92,7 @@ neuromirror/
   cli.py                 command-line entrypoint
   config.py              experiment and stream settings
   replay.py              live-like replay loop
+  reporting.py           cohort report generation
   server.py              local dashboard server
   synthetic.py           synthetic EEG generator for demos/tests
   cohort.py              multi-subject Experiment 001 summaries

@@ -41,6 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
     cohort.add_argument("--session", default=DEFAULT_SESSION)
     cohort.add_argument("--acquisition", default=DEFAULT_ACQUISITION)
     cohort.add_argument("--seconds-per-state", type=float, default=12.0)
+    cohort.add_argument("--report-dir", type=Path, default=None)
     return parser
 
 
@@ -86,6 +87,7 @@ def main() -> None:
 
     if args.command == "cohort-openneuro":
         from neuromirror.cohort import analyze_openneuro_cohort
+        from neuromirror.reporting import write_cohort_report
 
         summary = analyze_openneuro_cohort(
             dataset_root=args.dataset_root,
@@ -94,6 +96,9 @@ def main() -> None:
             acquisition=args.acquisition,
             seconds_per_state=args.seconds_per_state,
         )
+        if args.report_dir is not None:
+            json_path, markdown_path = write_cohort_report(summary, args.report_dir, args.dataset_root.name)
+            summary["report_paths"] = {"json": str(json_path), "markdown": str(markdown_path)}
         print(json.dumps(summary, indent=2))
 
 

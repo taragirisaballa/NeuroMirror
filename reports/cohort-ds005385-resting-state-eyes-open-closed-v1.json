@@ -1,0 +1,65 @@
+{
+  "experiment_id": "resting-state-eyes-open-closed-v1",
+  "subject_count": 4,
+  "supported_subject_count": 4,
+  "skipped_subject_count": 0,
+  "group": {
+    "median_ratio_closed_open": 9.39,
+    "iqr_ratio_closed_open": [
+      5.795,
+      11.745
+    ],
+    "median_db_change": 9.625,
+    "iqr_db_change": [
+      6.59,
+      10.697
+    ]
+  },
+  "subjects": [
+    {
+      "subject": "001",
+      "supported": true,
+      "ratio_closed_open": 12.732,
+      "db_change": 11.05,
+      "open_windows": 41,
+      "closed_windows": 48,
+      "usable_windows": 89,
+      "artifact_windows": 42,
+      "summary": "Posterior alpha increased during eyes closed (12.73x, +11.05 dB; 41 open / 48 closed usable windows)."
+    },
+    {
+      "subject": "002",
+      "supported": true,
+      "ratio_closed_open": 7.365,
+      "db_change": 8.67,
+      "open_windows": 41,
+      "closed_windows": 48,
+      "usable_windows": 89,
+      "artifact_windows": 41,
+      "summary": "Posterior alpha increased during eyes closed (7.37x, +8.67 dB; 41 open / 48 closed usable windows)."
+    },
+    {
+      "subject": "003",
+      "supported": true,
+      "ratio_closed_open": 1.085,
+      "db_change": 0.35,
+      "open_windows": 41,
+      "closed_windows": 48,
+      "usable_windows": 89,
+      "artifact_windows": 38,
+      "summary": "Posterior alpha increased during eyes closed (1.08x, +0.35 dB; 41 open / 48 closed usable windows)."
+    },
+    {
+      "subject": "004",
+      "supported": true,
+      "ratio_closed_open": 11.416,
+      "db_change": 10.58,
+      "open_windows": 39,
+      "closed_windows": 48,
+      "usable_windows": 87,
+      "artifact_windows": 52,
+      "summary": "Posterior alpha increased during eyes closed (11.42x, +10.58 dB; 39 open / 48 closed usable windows)."
+    }
+  ],
+  "skipped": []
+}
