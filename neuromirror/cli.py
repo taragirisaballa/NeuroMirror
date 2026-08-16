@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from neuromirror.config import ReplayConfig
@@ -33,6 +34,13 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.add_argument("--session", default=DEFAULT_SESSION)
     fetch.add_argument("--acquisition", default=DEFAULT_ACQUISITION)
     fetch.add_argument("--target-dir", type=Path, default=Path("data/openneuro"))
+
+    cohort = subparsers.add_parser("cohort-openneuro", help="Run Experiment 001 across local OpenNeuro subjects.")
+    cohort.add_argument("--dataset-root", type=Path, default=Path("data/openneuro/ds005385"))
+    cohort.add_argument("--subjects", nargs="*", default=None)
+    cohort.add_argument("--session", default=DEFAULT_SESSION)
+    cohort.add_argument("--acquisition", default=DEFAULT_ACQUISITION)
+    cohort.add_argument("--seconds-per-state", type=float, default=12.0)
     return parser
 
 
@@ -75,6 +83,18 @@ def main() -> None:
             target_dir=args.target_dir,
         )
         print(f"OpenNeuro subset ready at {dataset_root}")
+
+    if args.command == "cohort-openneuro":
+        from neuromirror.cohort import analyze_openneuro_cohort
+
+        summary = analyze_openneuro_cohort(
+            dataset_root=args.dataset_root,
+            subjects=args.subjects,
+            session=args.session,
+            acquisition=args.acquisition,
+            seconds_per_state=args.seconds_per_state,
+        )
+        print(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":

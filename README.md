@@ -41,6 +41,19 @@ python -m neuromirror.cli dashboard
 
 Then open `http://127.0.0.1:8765`.
 
+To run Experiment 001 across every locally fetched subject:
+
+```bash
+python -m neuromirror.cli cohort-openneuro --dataset-root data/openneuro/ds005385
+```
+
+To include more subjects, fetch them first and rerun the cohort command:
+
+```bash
+python -m neuromirror.cli fetch-openneuro --dataset ds005385 --subject 002
+python -m neuromirror.cli cohort-openneuro --dataset-root data/openneuro/ds005385
+```
+
 ## Real EEG Replay
 
 NeuroMirror's dashboard replays real EEG from `ds005385` once one subject has been fetched:
@@ -75,6 +88,7 @@ neuromirror/
   replay.py              live-like replay loop
   server.py              local dashboard server
   synthetic.py           synthetic EEG generator for demos/tests
+  cohort.py              multi-subject Experiment 001 summaries
   experiments/
     base.py              experiment preset interface
     resting_state.py     Experiment 001: eyes-open / eyes-closed posterior alpha
