@@ -1,0 +1,23 @@
+experiment_id: motor-imagery-left-right-v1
+name: Left vs Right Motor Imagery
+source:
+  type: physionet-eegbci
+  dataset: eegmmidb
+  subject: "001"
+  runs: [4, 8, 12]
+channels: [C3, C4, Cz]
+states:
+  rest: T0
+  left_fist_imagery: T1
+  right_fist_imagery: T2
+primary_question: >
+  Does sensorimotor mu/alpha power decrease over contralateral motor cortex during
+  imagined left and right fist movement?
+metrics:
+  - left_imagery_C4_mu
+  - right_imagery_C3_mu
+  - left_imagery_C4_beta
+  - right_imagery_C3_beta
+notes:
+  - This is an experiment preset, not a motor-imagery classifier.
+  - Mu is measured with the existing 8-13 Hz alpha band over C3/C4.

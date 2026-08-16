@@ -60,6 +60,17 @@ python -m neuromirror.cli fetch-openneuro --dataset ds005385 --subject 002
 python -m neuromirror.cli cohort-openneuro --dataset-root data/openneuro/ds005385
 ```
 
+## Experiment 002: Motor Imagery
+
+Experiment 002 uses the PhysioNet EEGBCI motor movement/imagery dataset as a second source adapter. It asks a different neuroscience question: whether left/right fist motor imagery produces contralateral mu/alpha suppression over C3/C4.
+
+```bash
+python -m neuromirror.cli fetch-physionet-mi --subject 001
+python -m neuromirror.cli motor-imagery-physionet --subject 001
+```
+
+This prints the experiment-specific evidence payload. It does not redesign the dashboard; the purpose is to prove that a new dataset source and a new experiment preset can run through the same replay, windowing, PSD, bandpower, and artifact foundation.
+
 ## Real EEG Replay
 
 NeuroMirror's dashboard replays real EEG from `ds005385` once one subject has been fetched:
@@ -96,8 +107,10 @@ neuromirror/
   server.py              local dashboard server
   synthetic.py           synthetic EEG generator for demos/tests
   cohort.py              multi-subject Experiment 001 summaries
+  physionet_mi.py        PhysioNet EEGBCI source adapter
   experiments/
     base.py              experiment preset interface
+    motor_imagery.py     Experiment 002: motor imagery mu/beta suppression
     resting_state.py     Experiment 001: eyes-open / eyes-closed posterior alpha
   processing/
     bandpower.py         frequency-band feature extraction
@@ -108,6 +121,7 @@ docs/
   openneuro-plan.md      public EEG dataset plan
 experiments/
   eyes-open-closed.yaml  first replay experiment
+  motor-imagery.yaml     second experiment preset
 tests/
   test_pipeline.py
 web/
@@ -121,5 +135,7 @@ web/
 1. Synthetic replay with bandpower features
 2. OpenNeuro loader for one BIDS EEG dataset
 3. Browser dashboard with raw traces and alpha activity
-4. Raspberry Pi Zero 2 W deployment notes
-5. Live EEG adapter when hardware is available
+4. Multi-subject Experiment 001 cohort evidence
+5. Experiment 002 with a second EEG source and paradigm
+6. Raspberry Pi Zero 2 W deployment notes
+7. Live EEG adapter when hardware is available
