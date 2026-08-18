@@ -57,6 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     motor.add_argument("--dataset-root", type=Path, default=PHYSIONET_REPLAY_ROOT)
     motor.add_argument("--subject", default=DEFAULT_PHYSIONET_SUBJECT)
     motor.add_argument("--runs", nargs="*", type=int, default=list(DEFAULT_MOTOR_IMAGERY_RUNS))
+    motor.add_argument("--report-dir", type=Path, default=None)
     return parser
 
 
@@ -150,6 +151,7 @@ def main() -> None:
     if args.command == "motor-imagery-physionet":
         from neuromirror.experiments.motor_imagery import LEFT_RIGHT_MOTOR_IMAGERY
         from neuromirror.physionet_mi import load_physionet_motor_imagery_replay
+        from neuromirror.reporting import write_motor_imagery_report
 
         config = ReplayConfig(channels=MOTOR_IMAGERY_CHANNELS, sample_rate_hz=160)
         data, times, labels = load_physionet_motor_imagery_replay(
@@ -160,6 +162,14 @@ def main() -> None:
         )
         frames = list(replay_frames(data, times, labels, config, experiment_preset=LEFT_RIGHT_MOTOR_IMAGERY))
         analysis = frames[0].get("experiment", {}) if frames else {}
+        if args.report_dir is not None and analysis:
+            json_path, markdown_path = write_motor_imagery_report(
+                dict(analysis),
+                args.report_dir,
+                "physionet-eegbci",
+                args.subject,
+            )
+            analysis["report_paths"] = {"json": str(json_path), "markdown": str(markdown_path)}
         print(json.dumps(analysis, indent=2))
 
 

@@ -16,6 +16,23 @@ def write_cohort_report(summary: dict[str, object], output_dir: Path, dataset: s
     return json_path, markdown_path
 
 
+def write_motor_imagery_report(
+    analysis: dict[str, object],
+    output_dir: Path,
+    dataset: str,
+    subject: str,
+) -> tuple[Path, Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    experiment_id = str(analysis["experiment_id"])
+    stem = f"subject-{subject}-{dataset}-{experiment_id}"
+    json_path = output_dir / f"{stem}.json"
+    markdown_path = output_dir / f"{stem}.md"
+
+    json_path.write_text(json.dumps(analysis, indent=2) + "\n")
+    markdown_path.write_text(motor_imagery_report_markdown(analysis, dataset, subject))
+    return json_path, markdown_path
+
+
 def cohort_report_markdown(summary: dict[str, object], dataset: str) -> str:
     group = dict(summary.get("group", {}))
     subjects = list(summary.get("subjects", []))
@@ -89,6 +106,93 @@ def cohort_report_markdown(summary: dict[str, object], dataset: str) -> str:
             lines.append(f"- `sub-{item['subject']}`: {item['reason']}")
 
     return "\n".join(lines) + "\n"
+
+
+def motor_imagery_report_markdown(analysis: dict[str, object], dataset: str, subject: str) -> str:
+    comparisons = dict(analysis.get("comparisons", {}))
+    primary = dict(analysis.get("primary_result", {}))
+    support_label = "pattern present" if primary.get("supported") else "not consistently present"
+    lines = [
+        "# NeuroMirror Motor Imagery Report",
+        "",
+        f"- Dataset: `{dataset}`",
+        f"- Subject: `sub-{subject}`",
+        f"- Experiment: `{analysis['experiment_id']}`",
+        f"- Primary result: `{support_label}`",
+        f"- Clean windows: `{analysis.get('clean_windows', 0)}`",
+        f"- Artifact-flagged windows: `{analysis.get('artifact_windows', 0)}`",
+        f"- Minimum suppression threshold: `{format_optional(analysis.get('min_suppression_db'), ' dB')}`",
+        "",
+        "## Interpretation",
+        "",
+        str(primary.get("summary") or "No motor-imagery conclusion was available."),
+        "",
+        "## Contralateral Sensorimotor Result",
+        "",
+        "| Task | Expected Channel | Band | Rest Median | Task Median | Task/Rest | dB Change | Rest Windows | Task Windows |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|",
+    ]
+
+    for key in ("left_imagery_C4_mu", "right_imagery_C3_mu", "left_imagery_C4_beta", "right_imagery_C3_beta"):
+        if key in comparisons:
+            lines.append(motor_imagery_row(str(key), dict(comparisons[key])))
+
+    lines.extend(
+        [
+            "",
+            "## Ipsilateral Check",
+            "",
+            "| Task | Channel | Band | Task/Rest | dB Change |",
+            "|---|---|---|---:|---:|",
+        ]
+    )
+    for key in ("left_imagery_C3_mu", "right_imagery_C4_mu"):
+        if key in comparisons:
+            item = dict(comparisons[key])
+            lines.append(
+                "| "
+                f"{motor_task_label(str(item.get('state')))} | "
+                f"{', '.join(str(channel) for channel in item.get('channels', []))} | "
+                f"{band_label(str(item.get('band')))} | "
+                f"{format_optional(item.get('ratio_task_rest'), 'x')} | "
+                f"{format_optional(item.get('db_change'), ' dB', signed=True)} |"
+            )
+
+    lines.extend(["", "## Notes", ""])
+    lines.append(
+        "This report summarizes Experiment 002 for one PhysioNet EEGBCI subject. "
+        "Mu is represented by the existing 8-13 Hz alpha band over C3/C4. "
+        "A supported result requires both expected contralateral comparisons to clear the dB suppression threshold; "
+        "weak or one-sided effects are reported without being overclaimed."
+    )
+    return "\n".join(lines) + "\n"
+
+
+def motor_imagery_row(key: str, item: dict[str, object]) -> str:
+    return (
+        "| "
+        f"{motor_task_label(str(item.get('state')))} | "
+        f"{', '.join(str(channel) for channel in item.get('channels', []))} | "
+        f"{band_label(str(item.get('band')))} | "
+        f"{format_optional(item.get('rest_median_uv2'), ' uV^2')} | "
+        f"{format_optional(item.get('task_median_uv2'), ' uV^2')} | "
+        f"{format_optional(item.get('ratio_task_rest'), 'x')} | "
+        f"{format_optional(item.get('db_change'), ' dB', signed=True)} | "
+        f"{item.get('rest_windows', 0)} | "
+        f"{item.get('task_windows', 0)} |"
+    )
+
+
+def motor_task_label(state: str) -> str:
+    return {
+        "left_fist_imagery": "Left fist imagery",
+        "right_fist_imagery": "Right fist imagery",
+        "rest": "Rest",
+    }.get(state, state)
+
+
+def band_label(band: str) -> str:
+    return "mu/alpha" if band == "alpha" else band
 
 
 def interpretation(summary: dict[str, object], weak_subjects: list[object]) -> str:

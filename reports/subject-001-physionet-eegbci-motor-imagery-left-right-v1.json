@@ -1,0 +1,155 @@
+{
+  "experiment_id": "motor-imagery-left-right-v1",
+  "name": "Left vs Right Motor Imagery",
+  "clean_windows": 1493,
+  "excluded_windows": 0,
+  "artifact_windows": 0,
+  "total_windows": 1493,
+  "min_state_windows": 5,
+  "min_suppression_db": 0.5,
+  "window_rule": "motor imagery comparisons use windows where the requested C3/C4 channel is marked ok",
+  "comparisons": {
+    "left_imagery_C4_mu": {
+      "state": "left_fist_imagery",
+      "channels": [
+        "C4"
+      ],
+      "band": "alpha",
+      "rest_median_uv2": 83.089,
+      "task_median_uv2": 79.625,
+      "rest_iqr_uv2": [
+        60.792,
+        123.388
+      ],
+      "task_iqr_uv2": [
+        56.574,
+        112.259
+      ],
+      "ratio_task_rest": 0.958,
+      "db_change": -0.18,
+      "percent_change": -4.2,
+      "rest_windows": 181,
+      "task_windows": 129
+    },
+    "right_imagery_C3_mu": {
+      "state": "right_fist_imagery",
+      "channels": [
+        "C3"
+      ],
+      "band": "alpha",
+      "rest_median_uv2": 112.67,
+      "task_median_uv2": 59.689,
+      "rest_iqr_uv2": [
+        88.57,
+        168.824
+      ],
+      "task_iqr_uv2": [
+        53.419,
+        63.922
+      ],
+      "ratio_task_rest": 0.53,
+      "db_change": -2.76,
+      "percent_change": -47.0,
+      "rest_windows": 64,
+      "task_windows": 8
+    },
+    "left_imagery_C4_beta": {
+      "state": "left_fist_imagery",
+      "channels": [
+        "C4"
+      ],
+      "band": "beta",
+      "rest_median_uv2": 114.375,
+      "task_median_uv2": 114.287,
+      "rest_iqr_uv2": [
+        93.136,
+        135.501
+      ],
+      "task_iqr_uv2": [
+        95.014,
+        139.217
+      ],
+      "ratio_task_rest": 0.999,
+      "db_change": -0.0,
+      "percent_change": -0.1,
+      "rest_windows": 181,
+      "task_windows": 129
+    },
+    "right_imagery_C3_beta": {
+      "state": "right_fist_imagery",
+      "channels": [
+        "C3"
+      ],
+      "band": "beta",
+      "rest_median_uv2": 162.976,
+      "task_median_uv2": 125.028,
+      "rest_iqr_uv2": [
+        124.305,
+        182.5
+      ],
+      "task_iqr_uv2": [
+        115.459,
+        133.675
+      ],
+      "ratio_task_rest": 0.767,
+      "db_change": -1.15,
+      "percent_change": -23.3,
+      "rest_windows": 64,
+      "task_windows": 8
+    },
+    "left_imagery_C3_mu": {
+      "state": "left_fist_imagery",
+      "channels": [
+        "C3"
+      ],
+      "band": "alpha",
+      "rest_median_uv2": 112.67,
+      "task_median_uv2": 74.772,
+      "rest_iqr_uv2": [
+        88.57,
+        168.824
+      ],
+      "task_iqr_uv2": [
+        62.144,
+        124.192
+      ],
+      "ratio_task_rest": 0.664,
+      "db_change": -1.78,
+      "percent_change": -33.6,
+      "rest_windows": 64,
+      "task_windows": 24
+    },
+    "right_imagery_C4_mu": {
+      "state": "right_fist_imagery",
+      "channels": [
+        "C4"
+      ],
+      "band": "alpha",
+      "rest_median_uv2": 83.089,
+      "task_median_uv2": 82.578,
+      "rest_iqr_uv2": [
+        60.792,
+        123.388
+      ],
+      "task_iqr_uv2": [
+        59.899,
+        115.432
+      ],
+      "ratio_task_rest": 0.994,
+      "db_change": -0.03,
+      "percent_change": -0.6,
+      "rest_windows": 181,
+      "task_windows": 86
+    }
+  },
+  "primary_result": {
+    "label": "Contralateral mu suppression",
+    "band": "mu/alpha",
+    "channels": [
+      "C3",
+      "C4"
+    ],
+    "supported": false,
+    "summary": "The expected bilateral contralateral mu suppression pattern was not consistently present (left imagery C4 0.96x, -0.18 dB; right imagery C3 0.53x, -2.76 dB)."
+  }
+}

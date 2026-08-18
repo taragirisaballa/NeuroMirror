@@ -71,6 +71,12 @@ python -m neuromirror.cli motor-imagery-physionet --subject 001
 
 This prints the experiment-specific evidence payload. It does not redesign the dashboard; the purpose is to prove that a new dataset source and a new experiment preset can run through the same replay, windowing, PSD, bandpower, and artifact foundation.
 
+To save a Motor Imagery report:
+
+```bash
+python -m neuromirror.cli motor-imagery-physionet --subject 001 --report-dir reports
+```
+
 ## Real EEG Replay
 
 NeuroMirror's dashboard replays real EEG from `ds005385` once one subject has been fetched:
