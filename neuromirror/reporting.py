@@ -33,6 +33,22 @@ def write_motor_imagery_report(
     return json_path, markdown_path
 
 
+def write_motor_imagery_cohort_report(
+    summary: dict[str, object],
+    output_dir: Path,
+    dataset: str,
+) -> tuple[Path, Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    experiment_id = str(summary["experiment_id"])
+    stem = f"cohort-{dataset}-{experiment_id}"
+    json_path = output_dir / f"{stem}.json"
+    markdown_path = output_dir / f"{stem}.md"
+
+    json_path.write_text(json.dumps(summary, indent=2) + "\n")
+    markdown_path.write_text(motor_imagery_cohort_report_markdown(summary, dataset))
+    return json_path, markdown_path
+
+
 def cohort_report_markdown(summary: dict[str, object], dataset: str) -> str:
     group = dict(summary.get("group", {}))
     subjects = list(summary.get("subjects", []))
@@ -105,6 +121,78 @@ def cohort_report_markdown(summary: dict[str, object], dataset: str) -> str:
             item = dict(subject)
             lines.append(f"- `sub-{item['subject']}`: {item['reason']}")
 
+    return "\n".join(lines) + "\n"
+
+
+def motor_imagery_cohort_report_markdown(summary: dict[str, object], dataset: str) -> str:
+    group = dict(summary.get("group", {}))
+    subjects = list(summary.get("subjects", []))
+    skipped = list(summary.get("skipped", []))
+    subject_count = int(summary.get("subject_count") or 0)
+    bilateral_count = int(summary.get("bilateral_subject_count") or 0)
+    partial_count = int(summary.get("partial_subject_count") or 0)
+    not_consistent_count = int(summary.get("not_consistent_subject_count") or 0)
+    insufficient_count = int(summary.get("insufficient_subject_count") or 0)
+
+    lines = [
+        "# NeuroMirror Motor Imagery Cohort Report",
+        "",
+        f"- Dataset: `{dataset}`",
+        f"- Experiment: `{summary['experiment_id']}`",
+        f"- Subjects analyzed: `{subject_count}`",
+        f"- Bilateral pattern present: `{bilateral_count}/{subject_count}`",
+        f"- Partial pattern: `{partial_count}/{subject_count}`",
+        f"- Not consistently present: `{not_consistent_count}/{subject_count}`",
+        f"- Insufficient clean windows: `{insufficient_count}/{subject_count}`",
+        f"- Skipped subjects: `{summary.get('skipped_subject_count', 0)}`",
+        "",
+        "## Group Result",
+        "",
+        f"- Median left-imagery C4 mu change: `{format_optional(group.get('median_left_mu_db'), ' dB', signed=True)}`",
+        f"- Left-imagery C4 mu dB IQR: `{format_iqr(group.get('iqr_left_mu_db'), ' dB', signed=True)}`",
+        f"- Median right-imagery C3 mu change: `{format_optional(group.get('median_right_mu_db'), ' dB', signed=True)}`",
+        f"- Right-imagery C3 mu dB IQR: `{format_iqr(group.get('iqr_right_mu_db'), ' dB', signed=True)}`",
+        "",
+        "## Interpretation",
+        "",
+        motor_cohort_interpretation(summary),
+        "",
+        "## Subject Results",
+        "",
+        "| Subject | Support | Left C4 Mu | Right C3 Mu | Left C4 Beta | Right C3 Beta | Rest | Left | Right | Artifact-Flagged |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+
+    for subject in subjects:
+        item = dict(subject)
+        lines.append(
+            "| "
+            f"`sub-{item['subject']}` | "
+            f"{support_label(str(item.get('support_level')))} | "
+            f"{format_optional(item.get('left_mu_db'), ' dB', signed=True)} | "
+            f"{format_optional(item.get('right_mu_db'), ' dB', signed=True)} | "
+            f"{format_optional(item.get('left_beta_db'), ' dB', signed=True)} | "
+            f"{format_optional(item.get('right_beta_db'), ' dB', signed=True)} | "
+            f"{item.get('rest_windows', 0)} | "
+            f"{item.get('left_windows', 0)} | "
+            f"{item.get('right_windows', 0)} | "
+            f"{item.get('artifact_windows', 0)} |"
+        )
+
+    if skipped:
+        lines.extend(["", "## Skipped Subjects", ""])
+        for subject in skipped:
+            item = dict(subject)
+            lines.append(f"- `sub-{item['subject']}`: {item['reason']}")
+
+    lines.extend(["", "## Notes", ""])
+    lines.append(
+        "This report summarizes Experiment 002 across PhysioNet EEGBCI subjects. "
+        "The primary outcome is contralateral mu/alpha suppression: left imagery should reduce C4 mu, "
+        "and right imagery should reduce C3 mu. Partial and absent patterns are kept visible rather than "
+        "discarded, because subject-to-subject variability is part of the evidence. Subjects with insufficient "
+        "clean rest/task windows are shown in the table but excluded from group medians."
+    )
     return "\n".join(lines) + "\n"
 
 
@@ -193,6 +281,32 @@ def motor_task_label(state: str) -> str:
 
 def band_label(band: str) -> str:
     return "mu/alpha" if band == "alpha" else band
+
+
+def motor_cohort_interpretation(summary: dict[str, object]) -> str:
+    subject_count = int(summary.get("subject_count") or 0)
+    if not subject_count:
+        return "No PhysioNet motor-imagery subjects were available for cohort analysis."
+    bilateral = int(summary.get("bilateral_subject_count") or 0)
+    partial = int(summary.get("partial_subject_count") or 0)
+    group = dict(summary.get("group", {}))
+    left_db = format_optional(group.get("median_left_mu_db"), " dB", signed=True)
+    right_db = format_optional(group.get("median_right_mu_db"), " dB", signed=True)
+    return (
+        f"Across {subject_count} subjects, {bilateral} showed the full bilateral contralateral pattern "
+        f"and {partial} showed a one-sided pattern. Median mu changes were {left_db} for left-imagery C4 "
+        f"and {right_db} for right-imagery C3."
+    )
+
+
+def support_label(value: str) -> str:
+    return {
+        "bilateral": "bilateral",
+        "left_only": "left only",
+        "right_only": "right only",
+        "not_consistent": "not consistent",
+        "insufficient_data": "insufficient data",
+    }.get(value, value)
 
 
 def interpretation(summary: dict[str, object], weak_subjects: list[object]) -> str:

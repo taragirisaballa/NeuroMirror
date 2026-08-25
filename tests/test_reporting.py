@@ -1,4 +1,4 @@
-from neuromirror.reporting import cohort_report_markdown, motor_imagery_report_markdown
+from neuromirror.reporting import cohort_report_markdown, motor_imagery_cohort_report_markdown, motor_imagery_report_markdown
 
 
 def test_cohort_report_markdown_summarizes_group_and_subjects() -> None:
@@ -91,3 +91,58 @@ def test_motor_imagery_report_markdown_summarizes_contralateral_evidence() -> No
     assert "Right fist imagery" in markdown
     assert "C3" in markdown
     assert "-2.76 dB" in markdown
+
+
+def test_motor_imagery_cohort_report_markdown_summarizes_subject_variability() -> None:
+    summary = {
+        "experiment_id": "motor-imagery-left-right-v1",
+        "subject_count": 2,
+        "bilateral_subject_count": 1,
+        "partial_subject_count": 1,
+        "not_consistent_subject_count": 0,
+        "insufficient_subject_count": 0,
+        "skipped_subject_count": 0,
+        "group": {
+            "median_left_mu_db": -0.715,
+            "iqr_left_mu_db": [-0.982, -0.448],
+            "median_right_mu_db": -2.155,
+            "iqr_right_mu_db": [-2.458, -1.852],
+        },
+        "subjects": [
+            {
+                "subject": "001",
+                "support_level": "right_only",
+                "left_mu_db": -0.18,
+                "right_mu_db": -2.76,
+                "left_beta_db": 0.0,
+                "right_beta_db": -1.15,
+                "clean_windows": 1493,
+                "artifact_windows": 0,
+                "rest_windows": 181,
+                "left_windows": 129,
+                "right_windows": 8,
+            },
+            {
+                "subject": "002",
+                "support_level": "bilateral",
+                "left_mu_db": -1.25,
+                "right_mu_db": -1.55,
+                "left_beta_db": -0.4,
+                "right_beta_db": -0.6,
+                "clean_windows": 1501,
+                "artifact_windows": 0,
+                "rest_windows": 180,
+                "left_windows": 120,
+                "right_windows": 120,
+            },
+        ],
+        "skipped": [],
+    }
+
+    markdown = motor_imagery_cohort_report_markdown(summary, "physionet-eegbci")
+
+    assert "# NeuroMirror Motor Imagery Cohort Report" in markdown
+    assert "Bilateral pattern present: `1/2`" in markdown
+    assert "`sub-001`" in markdown
+    assert "right only" in markdown
+    assert "Median right-imagery C3 mu change" in markdown

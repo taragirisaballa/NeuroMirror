@@ -77,6 +77,12 @@ To save a Motor Imagery report:
 python -m neuromirror.cli motor-imagery-physionet --subject 001 --report-dir reports
 ```
 
+To run a small Motor Imagery cohort:
+
+```bash
+python -m neuromirror.cli motor-imagery-cohort-physionet --subjects 001 002 003 004 005 --report-dir reports
+```
+
 ## Real EEG Replay
 
 NeuroMirror's dashboard replays real EEG from `ds005385` once one subject has been fetched:
@@ -113,6 +119,7 @@ neuromirror/
   server.py              local dashboard server
   synthetic.py           synthetic EEG generator for demos/tests
   cohort.py              multi-subject Experiment 001 summaries
+  motor_cohort.py        multi-subject Experiment 002 summaries
   physionet_mi.py        PhysioNet EEGBCI source adapter
   experiments/
     base.py              experiment preset interface

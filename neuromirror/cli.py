@@ -58,6 +58,12 @@ def build_parser() -> argparse.ArgumentParser:
     motor.add_argument("--subject", default=DEFAULT_PHYSIONET_SUBJECT)
     motor.add_argument("--runs", nargs="*", type=int, default=list(DEFAULT_MOTOR_IMAGERY_RUNS))
     motor.add_argument("--report-dir", type=Path, default=None)
+
+    motor_cohort = subparsers.add_parser("motor-imagery-cohort-physionet", help="Run Experiment 002 across PhysioNet EEGBCI subjects.")
+    motor_cohort.add_argument("--dataset-root", type=Path, default=PHYSIONET_REPLAY_ROOT)
+    motor_cohort.add_argument("--subjects", nargs="*", default=None)
+    motor_cohort.add_argument("--runs", nargs="*", type=int, default=list(DEFAULT_MOTOR_IMAGERY_RUNS))
+    motor_cohort.add_argument("--report-dir", type=Path, default=None)
     return parser
 
 
@@ -171,6 +177,20 @@ def main() -> None:
             )
             analysis["report_paths"] = {"json": str(json_path), "markdown": str(markdown_path)}
         print(json.dumps(analysis, indent=2))
+
+    if args.command == "motor-imagery-cohort-physionet":
+        from neuromirror.motor_cohort import analyze_physionet_motor_imagery_cohort
+        from neuromirror.reporting import write_motor_imagery_cohort_report
+
+        summary = analyze_physionet_motor_imagery_cohort(
+            dataset_root=args.dataset_root,
+            subjects=args.subjects,
+            runs=tuple(args.runs),
+        )
+        if args.report_dir is not None:
+            json_path, markdown_path = write_motor_imagery_cohort_report(summary, args.report_dir, "physionet-eegbci")
+            summary["report_paths"] = {"json": str(json_path), "markdown": str(markdown_path)}
+        print(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":

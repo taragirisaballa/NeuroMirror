@@ -1,0 +1,119 @@
+{
+  "experiment_id": "motor-imagery-left-right-v1",
+  "subject_count": 5,
+  "bilateral_subject_count": 1,
+  "partial_subject_count": 2,
+  "not_consistent_subject_count": 1,
+  "insufficient_subject_count": 1,
+  "skipped_subject_count": 0,
+  "group": {
+    "median_left_mu_ratio": 0.95,
+    "iqr_left_mu_ratio": [
+      0.928,
+      0.959
+    ],
+    "median_right_mu_ratio": 0.84,
+    "iqr_right_mu_ratio": [
+      0.756,
+      0.901
+    ],
+    "median_left_mu_db": -0.215,
+    "iqr_left_mu_db": [
+      -0.325,
+      -0.175
+    ],
+    "median_right_mu_db": -0.755,
+    "iqr_right_mu_db": [
+      -1.29,
+      -0.467
+    ]
+  },
+  "subjects": [
+    {
+      "subject": "001",
+      "supported": false,
+      "support_level": "right_only",
+      "left_mu_ratio": 0.958,
+      "left_mu_db": -0.18,
+      "right_mu_ratio": 0.53,
+      "right_mu_db": -2.76,
+      "left_beta_db": -0.0,
+      "right_beta_db": -1.15,
+      "clean_windows": 1493,
+      "artifact_windows": 0,
+      "rest_windows": 181,
+      "left_windows": 129,
+      "right_windows": 8,
+      "summary": "The expected bilateral contralateral mu suppression pattern was not consistently present (left imagery C4 0.96x, -0.18 dB; right imagery C3 0.53x, -2.76 dB)."
+    },
+    {
+      "subject": "002",
+      "supported": false,
+      "support_level": "right_only",
+      "left_mu_ratio": 0.943,
+      "left_mu_db": -0.25,
+      "right_mu_ratio": 0.832,
+      "right_mu_db": -0.8,
+      "left_beta_db": -0.28,
+      "right_beta_db": -0.15,
+      "clean_windows": 1469,
+      "artifact_windows": 0,
+      "rest_windows": 731,
+      "left_windows": 377,
+      "right_windows": 335,
+      "summary": "The expected bilateral contralateral mu suppression pattern was not consistently present (left imagery C4 0.94x, -0.25 dB; right imagery C3 0.83x, -0.80 dB)."
+    },
+    {
+      "subject": "003",
+      "supported": false,
+      "support_level": "insufficient_data",
+      "left_mu_ratio": 1.333,
+      "left_mu_db": 1.25,
+      "right_mu_ratio": 2.695,
+      "right_mu_db": 4.31,
+      "left_beta_db": -0.22,
+      "right_beta_db": 3.87,
+      "clean_windows": 1493,
+      "artifact_windows": 0,
+      "rest_windows": 3,
+      "left_windows": 5,
+      "right_windows": 3,
+      "summary": "Not enough usable rest, left-imagery, and right-imagery windows to support a motor-imagery conclusion."
+    },
+    {
+      "subject": "004",
+      "supported": true,
+      "support_level": "bilateral",
+      "left_mu_ratio": 0.882,
+      "left_mu_db": -0.55,
+      "right_mu_ratio": 0.848,
+      "right_mu_db": -0.71,
+      "left_beta_db": -0.48,
+      "right_beta_db": -0.82,
+      "clean_windows": 1469,
+      "artifact_windows": 0,
+      "rest_windows": 590,
+      "left_windows": 370,
+      "right_windows": 354,
+      "summary": "Contralateral mu power decreased during motor imagery (left imagery C4 0.88x, -0.55 dB; right imagery C3 0.85x, -0.71 dB)."
+    },
+    {
+      "subject": "005",
+      "supported": false,
+      "support_level": "not_consistent",
+      "left_mu_ratio": 0.963,
+      "left_mu_db": -0.16,
+      "right_mu_ratio": 1.062,
+      "right_mu_db": 0.26,
+      "left_beta_db": -0.6,
+      "right_beta_db": -0.56,
+      "clean_windows": 1469,
+      "artifact_windows": 0,
+      "rest_windows": 715,
+      "left_windows": 344,
+      "right_windows": 356,
+      "summary": "The expected bilateral contralateral mu suppression pattern was not consistently present (left imagery C4 0.96x, -0.16 dB; right imagery C3 1.06x, +0.26 dB)."
+    }
+  ],
+  "skipped": []
+}
